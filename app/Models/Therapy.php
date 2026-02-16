@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToPharmacy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -89,5 +90,17 @@ class Therapy extends Model
     public function chronicCare(): HasMany
     {
         return $this->hasMany(TherapyChronicCare::class, 'therapy_id');
+    }
+
+    public function assistants(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Assistant::class,
+            'jta_therapy_assistant',
+            'therapy_id',
+            'assistant_id'
+        )
+            ->withPivot(['role', 'preferences_json', 'consents_json', 'contact_channel'])
+            ->withTimestamps();
     }
 }
