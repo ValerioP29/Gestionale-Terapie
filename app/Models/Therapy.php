@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -70,6 +71,12 @@ class Therapy extends Model
         return $this->hasMany(TherapyConsent::class, 'therapy_id');
     }
 
+    public function latestConsent(): HasOne
+    {
+        return $this->hasOne(TherapyConsent::class, 'therapy_id')
+            ->ofMany('signed_at', 'max');
+    }
+
     public function checklistQuestions(): HasMany
     {
         return $this->hasMany(TherapyChecklistQuestion::class, 'therapy_id');
@@ -90,6 +97,17 @@ class Therapy extends Model
     public function chronicCare(): HasMany
     {
         return $this->hasMany(TherapyChronicCare::class, 'therapy_id');
+    }
+
+    public function latestSurvey(): HasOne
+    {
+        return $this->hasOne(TherapyConditionSurvey::class, 'therapy_id')
+            ->ofMany('compiled_at', 'max');
+    }
+
+    public function currentChronicCare(): HasOne
+    {
+        return $this->hasOne(TherapyChronicCare::class, 'therapy_id')->latestOfMany();
     }
 
     public function assistants(): BelongsToMany
