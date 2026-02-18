@@ -3,18 +3,31 @@
 namespace App\Services\Therapies;
 
 use App\Models\Patient;
-use App\Models\Assistant;
 use App\Models\Therapy;
 use App\Tenancy\CurrentPharmacy;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class CreateTherapyService
 {
-    public function __construct(private readonly TherapyPayloadNormalizer $normalizer)
-    {
+    /** @var array<int, string> */
+    private const CHRONIC_CARE_BLOCKS = [
+        'care_context',
+        'doctor_info',
+        'general_anamnesis',
+        'biometric_info',
+        'detailed_intake',
+        'adherence_base',
+        'flags',
+    ];
+
+    public function __construct(
+        private readonly TherapyPayloadNormalizer $normalizer,
+        private readonly SaveTherapyConsentsService $saveTherapyConsentsService,
+        private readonly SaveTherapySurveyService $saveTherapySurveyService,
+        private readonly SyncTherapyAssistantsService $syncTherapyAssistantsService,
+    ) {
     }
 
     public function handle(array $payload): Therapy
@@ -28,8 +41,9 @@ class CreateTherapyService
                 throw new RuntimeException('Current pharmacy not resolved');
             }
 
-            $therapy = Therapy::create([
-                'patient_id' => $this->resolvePatientId($normalized),
+            $therapy = Therapy::query()->create([
+                'pharmacy_id' => $tenantId,
+                'patient_id' => $this->resolvePatientId($normalized, $tenantId),
                 'therapy_title' => $normalized['therapy_title'],
                 'therapy_description' => $normalized['therapy_description'] ?? null,
                 'status' => $normalized['status'] ?? 'active',
@@ -43,20 +57,25 @@ class CreateTherapyService
             }
 
             $this->syncChronicCare($therapy, $normalized);
-            $this->storeLatestConsent($therapy, $normalized['consent'] ?? null);
-            $this->storeLatestSurvey($therapy, $normalized['survey'] ?? null);
+            $this->saveTherapyConsentsService->handle($therapy, $normalized['consent'] ?? null);
+            $this->saveTherapySurveyService->handle($therapy, $normalized['survey'] ?? null);
 
-            if (isset($normalized['assistant_ids']) && is_array($normalized['assistant_ids'])) {
-                $this->syncAssistants($therapy, $normalized['assistant_ids'], $tenantId);
-            }
+            $assistants = is_array($normalized['assistants'] ?? null)
+                ? $normalized['assistants']
+                : collect($normalized['assistant_ids'] ?? [])->map(static fn ($id) => ['assistant_id' => (int) $id])->all();
 
-            return $therapy->fresh(['chronicCare', 'consents', 'conditionSurveys']);
+            $this->syncTherapyAssistantsService->handle($therapy, $assistants);
+
+            return $therapy->fresh(['patient', 'currentChronicCare', 'latestConsent', 'latestSurvey', 'assistants']);
         });
     }
 
-    private function resolvePatientId(array $normalized): int
+    private function resolvePatientId(array $normalized, int $tenantId): int
     {
-        return Patient::query()->findOrFail($normalized['patient_id'])->id;
+        return Patient::query()
+            ->where('pharmacy_id', $tenantId)
+            ->findOrFail($normalized['patient_id'])
+            ->id;
     }
 
     private function syncChronicCare(Therapy $therapy, array $normalized): void
@@ -68,78 +87,17 @@ class CreateTherapyService
         $attributes = [
             'primary_condition' => $normalized['primary_condition'] ?? 'unspecified',
             'risk_score' => $normalized['risk_score'] ?? null,
+            'notes_initial' => $normalized['notes_initial'] ?? null,
+            'follow_up_date' => $normalized['follow_up_date'] ?? null,
+            'consent' => $normalized['chronic_consent'] ?? null,
         ];
 
-        foreach ($normalized['chronic_care'] as $block => $data) {
-            $attributes[$block] = $data;
+        foreach (self::CHRONIC_CARE_BLOCKS as $block) {
+            if (array_key_exists($block, $normalized['chronic_care'])) {
+                $attributes[$block] = $normalized['chronic_care'][$block];
+            }
         }
 
         $therapy->chronicCare()->updateOrCreate([], $attributes);
-    }
-
-    private function storeLatestConsent(Therapy $therapy, ?array $consent): void
-    {
-        if ($consent === null) {
-            return;
-        }
-
-        $therapy->consents()->create([
-            'signer_name' => $consent['signer_name'],
-            'signer_relation' => $consent['signer_relation'],
-            'consent_text' => $consent['consent_text'],
-            'signed_at' => $consent['signed_at'] ?? Carbon::now(),
-            'ip_address' => $consent['ip_address'] ?? null,
-            'scopes_json' => $consent['scopes_json'] ?? null,
-            'signer_role' => $consent['signer_role'] ?? null,
-            'created_at' => Carbon::now(),
-        ]);
-    }
-
-    private function storeLatestSurvey(Therapy $therapy, ?array $survey): void
-    {
-        if ($survey === null) {
-            return;
-        }
-
-        $therapy->conditionSurveys()->create([
-            'condition_type' => $survey['condition_type'],
-            'level' => $survey['level'],
-            'answers' => $survey['answers'] ?? null,
-            'compiled_at' => Carbon::now(),
-        ]);
-    }
-
-    /** @param array<int, int|string|null> $assistantIds */
-    private function syncAssistants(Therapy $therapy, array $assistantIds, int $tenantId): void
-    {
-        $ids = array_values(array_filter(
-            array_map(static fn (mixed $id): int => (int) $id, array_unique($assistantIds)),
-            static fn (int $id): bool => $id > 0
-        ));
-
-        if ($ids === []) {
-            $therapy->assistants()->sync([]);
-            return;
-        }
-
-        $validIds = Assistant::query()
-            ->where('pharmacy_id', $tenantId)
-            ->whereIn('id', $ids)
-            ->pluck('id')
-            ->map(static fn (mixed $id): int => (int) $id)
-            ->all();
-
-        if (count($validIds) !== count($ids)) {
-            throw ValidationException::withMessages([
-                'assistant_ids' => ['Invalid assistant_ids for tenant'],
-            ]);
-        }
-
-        $syncData = [];
-        foreach ($validIds as $assistantId) {
-            $syncData[$assistantId] = ['pharmacy_id' => $tenantId];
-        }
-
-        $therapy->assistants()->sync($syncData);
     }
 }
