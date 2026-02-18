@@ -20,6 +20,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'pharmacy_id',
         'password',
     ];
 
@@ -42,6 +43,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'pharmacy_id' => 'integer',
             'password' => 'hashed',
         ];
     }
