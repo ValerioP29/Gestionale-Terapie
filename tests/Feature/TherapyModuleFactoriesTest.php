@@ -84,14 +84,14 @@ class TherapyModuleFactoriesTest extends TestCase
 
         Schema::create('jta_therapy_reminders', function (Blueprint $table): void {
             $table->increments('id');
+            $table->unsignedInteger('pharmacy_id');
             $table->unsignedInteger('therapy_id');
             $table->string('title');
-            $table->text('description')->nullable();
-            $table->string('frequency')->default('once');
-            $table->unsignedInteger('interval_value')->default(1);
+            $table->string('frequency')->default('weekly');
             $table->unsignedSmallInteger('weekday')->nullable();
             $table->timestamp('first_due_at');
-            $table->timestamp('next_due_at');
+            $table->timestamp('next_due_at')->nullable();
+            $table->timestamp('last_done_at')->nullable();
             $table->string('status')->default('active');
             $table->timestamps();
 

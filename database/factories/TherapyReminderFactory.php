@@ -20,14 +20,14 @@ class TherapyReminderFactory extends Factory
         app(CurrentPharmacy::class)->setId($therapy->pharmacy_id);
 
         return [
+            'pharmacy_id' => $therapy->pharmacy_id,
             'therapy_id' => $therapy->id,
             'title' => $this->faker->sentence(3),
-            'description' => $this->faker->optional()->sentence(),
-            'frequency' => 'daily',
-            'interval_value' => 1,
+            'frequency' => 'weekly',
             'weekday' => null,
             'first_due_at' => now(),
             'next_due_at' => now()->addDay(),
+            'last_done_at' => null,
             'status' => 'active',
         ];
     }
