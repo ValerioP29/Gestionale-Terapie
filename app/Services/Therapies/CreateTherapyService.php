@@ -3,6 +3,7 @@
 namespace App\Services\Therapies;
 
 use App\Models\Patient;
+use App\Services\Checklist\EnsureTherapyChecklistService;
 use App\Models\Therapy;
 use App\Tenancy\CurrentPharmacy;
 use Carbon\Carbon;
@@ -11,6 +12,11 @@ use RuntimeException;
 
 class CreateTherapyService
 {
+    private readonly SaveTherapyConsentsService $saveTherapyConsentsService;
+    private readonly SaveTherapySurveyService $saveTherapySurveyService;
+    private readonly SyncTherapyAssistantsService $syncTherapyAssistantsService;
+    private readonly EnsureTherapyChecklistService $ensureTherapyChecklistService;
+
     /** @var array<int, string> */
     private const CHRONIC_CARE_BLOCKS = [
         'care_context',
@@ -24,10 +30,15 @@ class CreateTherapyService
 
     public function __construct(
         private readonly TherapyPayloadNormalizer $normalizer,
-        private readonly SaveTherapyConsentsService $saveTherapyConsentsService,
-        private readonly SaveTherapySurveyService $saveTherapySurveyService,
-        private readonly SyncTherapyAssistantsService $syncTherapyAssistantsService,
+        ?SaveTherapyConsentsService $saveTherapyConsentsService = null,
+        ?SaveTherapySurveyService $saveTherapySurveyService = null,
+        ?SyncTherapyAssistantsService $syncTherapyAssistantsService = null,
+        ?EnsureTherapyChecklistService $ensureTherapyChecklistService = null,
     ) {
+        $this->saveTherapyConsentsService = $saveTherapyConsentsService ?? app(SaveTherapyConsentsService::class);
+        $this->saveTherapySurveyService = $saveTherapySurveyService ?? app(SaveTherapySurveyService::class);
+        $this->syncTherapyAssistantsService = $syncTherapyAssistantsService ?? app(SyncTherapyAssistantsService::class);
+        $this->ensureTherapyChecklistService = $ensureTherapyChecklistService ?? app(EnsureTherapyChecklistService::class);
     }
 
     public function handle(array $payload): Therapy
@@ -65,6 +76,7 @@ class CreateTherapyService
                 : collect($normalized['assistant_ids'] ?? [])->map(static fn ($id) => ['assistant_id' => (int) $id])->all();
 
             $this->syncTherapyAssistantsService->handle($therapy, $assistants);
+            $this->ensureTherapyChecklistService->handle($therapy);
 
             return $therapy->fresh(['patient', 'currentChronicCare', 'latestConsent', 'latestSurvey', 'assistants']);
         });

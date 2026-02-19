@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TherapyResource\Pages;
+use App\Filament\Resources\TherapyResource\RelationManagers\ChecklistRelationManager;
 use App\Models\Assistant;
 use App\Models\Patient;
 use App\Models\Therapy;
@@ -112,16 +113,27 @@ class TherapyResource extends Resource
                                 ->required()
                                 ->searchable()
                                 ->options(function (Forms\Get $get): array {
-                                    $condition = $get('../../survey.condition_type');
+                                    $tenantId = app(CurrentPharmacy::class)->getId();
+
+                                    if ($tenantId === null) {
+                                        return [];
+                                    }
+
+                                    $condition = trim((string) ($get('../../survey.condition_type') ?? ''));
+
+                                    if ($condition === '') {
+                                        return [];
+                                    }
 
                                     return TherapyChecklistQuestion::query()
-                                        ->when($condition, fn (Builder $query) => $query->where('condition_key', $condition))
+                                        ->where('pharmacy_id', $tenantId)
+                                        ->where('condition_key', $condition)
                                         ->where('is_active', true)
                                         ->orderBy('sort_order')
                                         ->limit(100)
                                         ->get()
                                         ->mapWithKeys(fn (TherapyChecklistQuestion $question): array => [
-                                            $question->question_key ?? (string) $question->id => $question->question_text,
+                                            $question->question_key ?? (string) $question->id => $question->label,
                                         ])
                                         ->all();
                                 }),
@@ -310,6 +322,14 @@ class TherapyResource extends Resource
         }
 
         return $query->where('pharmacy_id', $tenantId);
+    }
+
+
+    public static function getRelations(): array
+    {
+        return [
+            ChecklistRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

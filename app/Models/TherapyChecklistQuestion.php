@@ -20,16 +20,18 @@ class TherapyChecklistQuestion extends Model
         'pharmacy_id',
         'condition_key',
         'question_key',
-        'question_text',
+        'label',
         'input_type',
         'options_json',
         'sort_order',
         'is_active',
+        'is_custom',
     ];
 
     protected $casts = [
         'options_json' => 'array',
         'is_active' => 'boolean',
+        'is_custom' => 'boolean',
     ];
 
     public function therapy(): BelongsTo
