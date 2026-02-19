@@ -61,6 +61,16 @@ class Therapy extends Model
         return $this->hasMany(TherapyReport::class, 'therapy_id');
     }
 
+    public function manualFollowups(): HasMany
+    {
+        return $this->followups()->where('entry_type', 'followup');
+    }
+
+    public function checks(): HasMany
+    {
+        return $this->followups()->where('entry_type', 'check');
+    }
+
     public function conditionSurveys(): HasMany
     {
         return $this->hasMany(TherapyConditionSurvey::class, 'therapy_id');
