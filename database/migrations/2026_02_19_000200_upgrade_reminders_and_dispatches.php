@@ -18,16 +18,22 @@ return new class extends Migration
             }
         });
 
-        DB::table('jta_therapy_reminders')
-            ->join('jta_therapies', 'jta_therapies.id', '=', 'jta_therapy_reminders.therapy_id')
-            ->whereNull('jta_therapy_reminders.pharmacy_id')
-            ->update(['jta_therapy_reminders.pharmacy_id' => DB::raw('jta_therapies.pharmacy_id')]);
+        DB::statement(<<<'SQL'
+            UPDATE jta_therapy_reminders r
+            SET pharmacy_id = t.pharmacy_id
+            FROM jta_therapies t
+            WHERE r.therapy_id = t.id
+              AND r.pharmacy_id IS NULL
+        SQL);
 
         DB::table('jta_therapy_reminders')->where('frequency', 'once')->update(['frequency' => 'one_shot']);
         DB::table('jta_therapy_reminders')->where('frequency', 'daily')->update(['frequency' => 'weekly']);
         DB::table('jta_therapy_reminders')->where('status', 'canceled')->update(['status' => 'paused']);
 
-        DB::statement('ALTER TABLE jta_therapy_reminders ALTER COLUMN pharmacy_id TYPE integer USING pharmacy_id::integer');
+        if (DB::table('jta_therapy_reminders')->whereNull('pharmacy_id')->exists()) {
+            throw new \RuntimeException('jta_therapy_reminders has rows with NULL pharmacy_id after backfill.');
+        }
+
         DB::statement('ALTER TABLE jta_therapy_reminders ALTER COLUMN pharmacy_id SET NOT NULL');
 
         if (Schema::hasColumn('jta_therapy_reminders', 'description')) {
