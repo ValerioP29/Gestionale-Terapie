@@ -21,16 +21,20 @@ class TherapyFollowup extends Model
         'created_by',
         'entry_type',
         'check_type',
+        'occurred_at',
         'risk_score',
         'pharmacist_notes',
         'education_notes',
         'snapshot',
         'follow_up_date',
+        'canceled_at',
     ];
 
     protected $casts = [
         'snapshot' => 'array',
         'follow_up_date' => 'date',
+        'occurred_at' => 'datetime',
+        'canceled_at' => 'datetime',
     ];
 
     public function therapy(): BelongsTo

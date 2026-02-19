@@ -4,6 +4,8 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TherapyResource\Pages;
 use App\Filament\Resources\TherapyResource\RelationManagers\ChecklistRelationManager;
+use App\Filament\Resources\TherapyResource\RelationManagers\ChecksRelationManager;
+use App\Filament\Resources\TherapyResource\RelationManagers\FollowupsRelationManager;
 use App\Models\Assistant;
 use App\Models\Patient;
 use App\Models\Therapy;
@@ -329,6 +331,8 @@ class TherapyResource extends Resource
     {
         return [
             ChecklistRelationManager::class,
+            FollowupsRelationManager::class,
+            ChecksRelationManager::class,
         ];
     }
 

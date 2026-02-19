@@ -25,11 +25,13 @@ class TherapyFollowupFactory extends Factory
             'created_by' => null,
             'entry_type' => 'followup',
             'check_type' => null,
+            'occurred_at' => now(),
             'risk_score' => null,
             'pharmacist_notes' => null,
             'education_notes' => null,
             'snapshot' => [],
             'follow_up_date' => now()->toDateString(),
+            'canceled_at' => null,
         ];
     }
 }
