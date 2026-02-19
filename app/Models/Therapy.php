@@ -79,7 +79,9 @@ class Therapy extends Model
 
     public function checklistQuestions(): HasMany
     {
-        return $this->hasMany(TherapyChecklistQuestion::class, 'therapy_id');
+        return $this->hasMany(TherapyChecklistQuestion::class, 'therapy_id')
+            ->where('pharmacy_id', $this->pharmacy_id)
+            ->orderBy('sort_order');
     }
 
     public function checklistAnswers(): HasManyThrough
