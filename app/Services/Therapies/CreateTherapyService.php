@@ -8,7 +8,7 @@ use App\Models\Therapy;
 use App\Tenancy\CurrentPharmacy;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
+use App\Exceptions\CurrentPharmacyNotResolvedException;
 
 class CreateTherapyService
 {
@@ -49,7 +49,7 @@ class CreateTherapyService
             $tenantId = app(CurrentPharmacy::class)->getId();
 
             if ($tenantId === null) {
-                throw new RuntimeException('Current pharmacy not resolved');
+                throw new CurrentPharmacyNotResolvedException();
             }
 
             $therapy = Therapy::query()->create([

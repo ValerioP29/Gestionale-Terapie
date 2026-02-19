@@ -5,7 +5,7 @@ namespace App\Services\Patients;
 use App\Models\Patient;
 use App\Tenancy\CurrentPharmacy;
 use Illuminate\Support\Arr;
-use RuntimeException;
+use App\Exceptions\CurrentPharmacyNotResolvedException;
 
 class CreatePatientService
 {
@@ -14,7 +14,7 @@ class CreatePatientService
         $tenantId = app(CurrentPharmacy::class)->getId();
 
         if ($tenantId === null) {
-            throw new RuntimeException('Current pharmacy not resolved');
+            throw new CurrentPharmacyNotResolvedException();
         }
 
         $data = Arr::only($payload, [

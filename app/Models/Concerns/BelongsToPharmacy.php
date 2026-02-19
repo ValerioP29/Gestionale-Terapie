@@ -4,7 +4,7 @@ namespace App\Models\Concerns;
 
 use App\Tenancy\CurrentPharmacy;
 use Illuminate\Database\Eloquent\Builder;
-use RuntimeException;
+use App\Exceptions\CurrentPharmacyNotResolvedException;
 
 trait BelongsToPharmacy
 {
@@ -25,7 +25,7 @@ trait BelongsToPharmacy
             $pharmacyId = app(CurrentPharmacy::class)->getId();
 
             if ($pharmacyId === null) {
-                throw new RuntimeException('Current pharmacy not resolved');
+                throw new CurrentPharmacyNotResolvedException();
             }
 
             $model->pharmacy_id = $pharmacyId;

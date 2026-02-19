@@ -5,7 +5,7 @@ namespace App\Services\Patients;
 use App\Models\Patient;
 use App\Tenancy\CurrentPharmacy;
 use Illuminate\Support\Arr;
-use RuntimeException;
+use App\Exceptions\CurrentPharmacyNotResolvedException;
 
 class UpdatePatientService
 {
@@ -14,7 +14,7 @@ class UpdatePatientService
         $tenantId = app(CurrentPharmacy::class)->getId();
 
         if ($tenantId === null) {
-            throw new RuntimeException('Current pharmacy not resolved');
+            throw new CurrentPharmacyNotResolvedException();
         }
 
         if ((int) $patient->pharmacy_id !== $tenantId) {
