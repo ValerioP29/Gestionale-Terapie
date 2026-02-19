@@ -19,14 +19,15 @@ class TherapyReport extends Model
         'pharmacy_id',
         'content',
         'share_token',
-        'pin_code',
         'valid_until',
-        'recipients',
+        'pdf_path',
+        'pdf_generated_at',
     ];
 
     protected $casts = [
         'content' => 'array',
         'valid_until' => 'datetime',
+        'pdf_generated_at' => 'datetime',
     ];
 
     public function therapy(): BelongsTo

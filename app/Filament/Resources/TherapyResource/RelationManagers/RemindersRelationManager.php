@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TherapyResource\RelationManagers;
 
 use App\Models\TherapyReminder;
+use App\Services\Audit\AuditLogger;
 use App\Services\Reminders\ReminderService;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -87,8 +88,8 @@ class RemindersRelationManager extends RelationManager
 
                         Notification::make()->success()->title('Reminder aggiornato')->send();
                     }),
-                Tables\Actions\Action::make('pause')
-                    ->label('Pause')
+                Tables\Actions\Action::make('cancel_reminder')
+                    ->label('Cancel')
                     ->icon('heroicon-o-pause')
                     ->visible(fn (TherapyReminder $record): bool => $record->status === 'active')
                     ->action(function (TherapyReminder $record): void {
@@ -97,7 +98,16 @@ class RemindersRelationManager extends RelationManager
                             ->where('pharmacy_id', $this->ownerRecord->pharmacy_id)
                             ->update(['status' => 'paused']);
 
-                        Notification::make()->success()->title('Reminder in pausa')->send();
+                        app(AuditLogger::class)->log(
+                            pharmacyId: $this->ownerRecord->pharmacy_id,
+                            action: 'cancel_reminder',
+                            subject: $record,
+                            meta: [
+                                'therapy_id' => $this->ownerRecord->id,
+                            ],
+                        );
+
+                        Notification::make()->success()->title('Reminder annullato')->send();
                     }),
             ]);
     }
