@@ -14,6 +14,7 @@ use App\Models\TherapyChecklistQuestion;
 use App\Models\TherapyChronicCare;
 use App\Services\Patients\CreatePatientService;
 use App\Services\Patients\UpdatePatientService;
+use App\Services\Therapies\GenerateTherapyReportService;
 use App\Tenancy\CurrentPharmacy;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -309,7 +310,11 @@ class TherapyResource extends Resource
                 Tables\Actions\Action::make('generate_pdf')
                     ->label('Generate report PDF')
                     ->icon('heroicon-o-document-arrow-down')
-                    ->action(fn () => Notification::make()->warning()->title('Report service non ancora disponibile')->send()),
+                    ->action(function (Therapy $record): void {
+                        app(GenerateTherapyReportService::class)->handle($record);
+
+                        Notification::make()->success()->title('Report generation avviata')->send();
+                    }),
             ]);
     }
 

@@ -4,6 +4,7 @@ namespace App\Services\Therapies;
 
 use App\Models\Patient;
 use App\Models\Therapy;
+use App\Services\Audit\AuditLogger;
 use App\Tenancy\CurrentPharmacy;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +28,7 @@ class UpdateTherapyService
         private readonly SaveTherapyConsentsService $saveTherapyConsentsService,
         private readonly SaveTherapySurveyService $saveTherapySurveyService,
         private readonly SyncTherapyAssistantsService $syncTherapyAssistantsService,
+        private readonly AuditLogger $auditLogger,
     ) {
     }
 
@@ -60,13 +62,27 @@ class UpdateTherapyService
                 }
             }
 
-            if (($updates['status'] ?? $therapy->status) === 'suspended') {
+            $nextStatus = $updates['status'] ?? $therapy->status;
+            $wasSuspended = $therapy->status === 'suspended';
+
+            if ($nextStatus === 'suspended') {
                 $updates['end_date'] = Carbon::today()->toDateString();
             }
 
             if ($updates !== []) {
                 $therapy->fill($updates);
                 $therapy->save();
+
+                if (! $wasSuspended && $nextStatus === 'suspended') {
+                    $this->auditLogger->log(
+                        pharmacyId: $therapy->pharmacy_id,
+                        action: 'suspend_therapy',
+                        subject: $therapy,
+                        meta: [
+                            'end_date' => $therapy->end_date?->toDateString(),
+                        ],
+                    );
+                }
             }
 
             $this->syncChronicCare($therapy, $normalized);
