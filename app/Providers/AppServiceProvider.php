@@ -23,8 +23,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(CurrentPharmacy::class, fn () => new CurrentPharmacy());
-    }
+        $this->app->scoped(CurrentPharmacy::class, fn () => new CurrentPharmacy());    }
 
     /**
      * Bootstrap any application services.
