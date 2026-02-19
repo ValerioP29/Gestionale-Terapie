@@ -27,7 +27,8 @@ use Filament\Tables;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use RuntimeException;
+use Illuminate\Validation\ValidationException;
+use App\Exceptions\CurrentPharmacyNotResolvedException;
 
 class TherapyResource extends Resource
 {
@@ -49,7 +50,13 @@ class TherapyResource extends Resource
                         ->getOptionLabelUsing(fn ($value): ?string => self::getPatientLabel($value))
                         ->createOptionForm(self::patientFormSchema())
                         ->createOptionUsing(function (array $data): int {
-                            $patient = app(CreatePatientService::class)->handle($data);
+                            try {
+                                $patient = app(CreatePatientService::class)->handle($data);
+                            } catch (CurrentPharmacyNotResolvedException) {
+                                throw ValidationException::withMessages([
+                                    'patient_id' => 'Farmacia corrente non risolta. Seleziona una farmacia e riprova.',
+                                ]);
+                            }
 
                             Notification::make()->success()->title('Paziente creato')->send();
 
@@ -65,7 +72,7 @@ class TherapyResource extends Resource
                             $tenantId = app(CurrentPharmacy::class)->getId();
 
                             if ($tenantId === null) {
-                                throw new RuntimeException('Current pharmacy not resolved');
+                                throw new CurrentPharmacyNotResolvedException();
                             }
 
                             $patient = Patient::query()

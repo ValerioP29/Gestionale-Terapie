@@ -6,7 +6,7 @@ use App\Models\Assistant;
 use App\Models\Therapy;
 use App\Tenancy\CurrentPharmacy;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
+use App\Exceptions\CurrentPharmacyNotResolvedException;
 
 class SyncTherapyAssistantsService
 {
@@ -16,7 +16,7 @@ class SyncTherapyAssistantsService
         $tenantId = app(CurrentPharmacy::class)->getId();
 
         if ($tenantId === null) {
-            throw new RuntimeException('Current pharmacy not resolved');
+            throw new CurrentPharmacyNotResolvedException();
         }
 
         if ($assistants === []) {

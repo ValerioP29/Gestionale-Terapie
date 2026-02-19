@@ -20,6 +20,18 @@ class CurrentPharmacy
 
     public function resolveFromRequest(Request $request): void
     {
+        $session = $request->hasSession() ? $request->session() : null;
+
+        if ($session?->has('current_pharmacy_id')) {
+            $resolved = $this->normalizeId($session->get('current_pharmacy_id'));
+
+            if ($resolved !== null) {
+                $this->setResolvedValue($resolved);
+
+                return;
+            }
+        }
+
         $user = $request->user();
         $userPharmacyId = $user ? data_get($user, 'pharmacy_id') : null;
 
@@ -28,18 +40,26 @@ class CurrentPharmacy
 
             if ($resolved !== null) {
                 $this->setResolvedValue($resolved);
+
+                if ($session !== null) {
+                    $session->put('current_pharmacy_id', $resolved);
+                }
+
                 return;
             }
         }
 
-        $session = $request->hasSession() ? $request->session() : null;
-
-        foreach (['current_pharmacy_id', 'filament.current_pharmacy_id', 'pharmacy_id'] as $key) {
+        foreach (['filament.current_pharmacy_id', 'pharmacy_id'] as $key) {
             if ($session?->has($key)) {
                 $resolved = $this->normalizeId($session->get($key));
 
                 if ($resolved !== null) {
                     $this->setResolvedValue($resolved);
+
+                    if ($key !== 'current_pharmacy_id' && $session !== null) {
+                        $session->put('current_pharmacy_id', $resolved);
+                    }
+
                     return;
                 }
             }

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use RuntimeException;
+use App\Exceptions\CurrentPharmacyNotResolvedException;
 
 class Assistant extends Model
 {
@@ -50,7 +50,7 @@ class Assistant extends Model
             $pharmacyId = app(CurrentPharmacy::class)->getId();
 
             if ($pharmacyId === null) {
-                throw new RuntimeException('Current pharmacy not resolved');
+                throw new CurrentPharmacyNotResolvedException();
             }
 
             $assistant->pharma_id = $pharmacyId;
