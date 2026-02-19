@@ -2,28 +2,29 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToPharmacy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ReminderDispatch extends Model
 {
+    use BelongsToPharmacy;
     use HasFactory;
 
-    protected $table = 'reminder_dispatches';
+    protected $table = 'jta_reminder_dispatches';
 
     protected $fillable = [
+        'pharmacy_id',
         'reminder_id',
+        'due_at',
+        'attempt',
+        'outcome',
         'message_log_id',
-        'scheduled_for',
-        'dispatched_at',
-        'status',
-        'error',
     ];
 
     protected $casts = [
-        'scheduled_for' => 'datetime',
-        'dispatched_at' => 'datetime',
+        'due_at' => 'datetime',
     ];
 
     public function reminder(): BelongsTo

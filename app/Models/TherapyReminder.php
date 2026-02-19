@@ -2,32 +2,35 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToPharmacy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TherapyReminder extends Model
 {
+    use BelongsToPharmacy;
     use HasFactory;
 
     protected $table = 'jta_therapy_reminders';
 
     protected $fillable = [
+        'pharmacy_id',
         'therapy_id',
         'title',
-        'description',
         'frequency',
-        'interval_value',
         'weekday',
         'first_due_at',
         'next_due_at',
+        'last_done_at',
         'status',
     ];
 
     protected $casts = [
         'first_due_at' => 'datetime',
         'next_due_at' => 'datetime',
+        'last_done_at' => 'datetime',
     ];
 
     public function therapy(): BelongsTo
@@ -35,15 +38,13 @@ class TherapyReminder extends Model
         return $this->belongsTo(Therapy::class, 'therapy_id');
     }
 
-    public function pharmacy(): HasOneThrough
+    public function pharmacy(): BelongsTo
     {
-        return $this->hasOneThrough(
-            Pharmacy::class,
-            Therapy::class,
-            'id',
-            'id',
-            'therapy_id',
-            'pharmacy_id'
-        );
+        return $this->belongsTo(Pharmacy::class, 'pharmacy_id');
+    }
+
+    public function dispatches(): HasMany
+    {
+        return $this->hasMany(ReminderDispatch::class, 'reminder_id');
     }
 }
