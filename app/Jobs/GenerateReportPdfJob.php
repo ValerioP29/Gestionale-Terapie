@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\TherapyReport;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -33,6 +34,8 @@ class GenerateReportPdfJob implements ShouldQueue
         $pdf = Pdf::loadView('reports.pdf', [
             'report' => $report,
             'content' => $report->content ?? [],
+            'generatedAtRome' => CarbonImmutable::now('Europe/Rome')->format('d/m/Y H:i'),
+            'validUntilRome' => $report->valid_until?->setTimezone('Europe/Rome')->format('d/m/Y H:i'),
         ]);
 
         $path = sprintf('reports/%s/report-%d.pdf', $report->share_token, $report->id);

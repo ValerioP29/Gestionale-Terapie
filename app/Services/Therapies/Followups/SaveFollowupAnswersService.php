@@ -11,6 +11,10 @@ use Illuminate\Validation\ValidationException;
 
 class SaveFollowupAnswersService
 {
+    public function __construct(private readonly ChecklistAnswerValueValidator $valueValidator)
+    {
+    }
+
     /**
      * @param array{risk_score?: int|null, follow_up_date?: string|null, pharmacist_notes?: string|null, answers?: array<int|string, mixed>} $payload
      */
@@ -31,18 +35,25 @@ class SaveFollowupAnswersService
         $answers = (array) ($payload['answers'] ?? []);
 
         if ($answers !== []) {
-            $validQuestionIds = TherapyChecklistQuestion::query()
+            $questions = TherapyChecklistQuestion::query()
                 ->where('therapy_id', $therapy->id)
-                ->pluck('id')
-                ->map(fn (int $id): string => (string) $id)
-                ->all();
+                ->get()
+                ->keyBy(fn (TherapyChecklistQuestion $question): string => (string) $question->id);
 
             foreach ($answers as $questionId => $value) {
-                if (! in_array((string) $questionId, $validQuestionIds, true)) {
+                $question = $questions->get((string) $questionId);
+
+                if ($question === null) {
                     throw ValidationException::withMessages([
                         'answers' => 'Una o più domande non appartengono alla terapia.',
                     ]);
                 }
+
+                $normalizedValue = $this->valueValidator->validateAndNormalize(
+                    value: $value,
+                    inputType: $question->input_type,
+                    options: $question->options_json,
+                );
 
                 TherapyChecklistAnswer::withoutGlobalScopes()->updateOrCreate(
                     [
@@ -52,13 +63,24 @@ class SaveFollowupAnswersService
                         'question_id' => (int) $questionId,
                     ],
                     [
-                        'answer_value' => $value === null ? null : (string) $value,
-                        'answered_at' => $value === null ? null : CarbonImmutable::now(),
+                        'answer_value' => $normalizedValue === null
+                            ? null
+                            : $this->serializeAnswerValue($normalizedValue, $question->input_type),
+                        'answered_at' => $normalizedValue === null ? null : CarbonImmutable::now('UTC'),
                     ]
                 );
             }
         }
 
         return $followup->fresh(['checklistAnswers']);
+    }
+
+    private function serializeAnswerValue(mixed $value, string $inputType): string
+    {
+        if ($inputType === 'boolean') {
+            return $value ? '1' : '0';
+        }
+
+        return (string) $value;
     }
 }
