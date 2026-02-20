@@ -4,10 +4,12 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\MessageLogResource\Pages;
 use App\Models\MessageLog;
+use App\Tenancy\CurrentPharmacy;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class MessageLogResource extends Resource
 {
@@ -67,5 +69,18 @@ class MessageLogResource extends Resource
             'index' => Pages\ListMessageLogs::route('/'),
             'view' => Pages\ViewMessageLog::route('/{record}'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $tenantId = app(CurrentPharmacy::class)->getId();
+
+        $query = parent::getEloquentQuery();
+
+        if ($tenantId === null) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where('pharma_id', $tenantId);
     }
 }

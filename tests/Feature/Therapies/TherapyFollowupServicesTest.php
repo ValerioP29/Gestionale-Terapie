@@ -231,6 +231,73 @@ class TherapyFollowupServicesTest extends TestCase
         ]);
     }
 
+
+
+    public function test_save_followup_answers_rejects_invalid_select_option(): void
+    {
+        [$therapy] = $this->seedTherapy();
+
+        $question = TherapyChecklistQuestion::withoutGlobalScopes()->create([
+            'pharmacy_id' => $therapy->pharmacy_id,
+            'therapy_id' => $therapy->id,
+            'question_key' => 'q_select',
+            'label' => 'Aderenza',
+            'input_type' => 'select',
+            'options_json' => ['ottima', 'parziale'],
+            'is_active' => true,
+        ]);
+
+        $followup = TherapyFollowup::withoutGlobalScopes()->create([
+            'pharmacy_id' => $therapy->pharmacy_id,
+            'therapy_id' => $therapy->id,
+            'entry_type' => 'check',
+            'check_type' => 'periodic',
+            'occurred_at' => now(),
+        ]);
+
+        $this->expectException(ValidationException::class);
+
+        app(SaveFollowupAnswersService::class)->handle($therapy, $followup, [
+            'answers' => [
+                $question->id => 'scarsa',
+            ],
+        ]);
+    }
+
+    public function test_save_followup_answers_serializes_boolean_as_1_or_0(): void
+    {
+        [$therapy] = $this->seedTherapy();
+
+        $question = TherapyChecklistQuestion::withoutGlobalScopes()->create([
+            'pharmacy_id' => $therapy->pharmacy_id,
+            'therapy_id' => $therapy->id,
+            'question_key' => 'q_bool',
+            'label' => 'Assunzione corretta',
+            'input_type' => 'boolean',
+            'is_active' => true,
+        ]);
+
+        $followup = TherapyFollowup::withoutGlobalScopes()->create([
+            'pharmacy_id' => $therapy->pharmacy_id,
+            'therapy_id' => $therapy->id,
+            'entry_type' => 'check',
+            'check_type' => 'periodic',
+            'occurred_at' => now(),
+        ]);
+
+        app(SaveFollowupAnswersService::class)->handle($therapy, $followup, [
+            'answers' => [
+                $question->id => true,
+            ],
+        ]);
+
+        $this->assertDatabaseHas('jta_therapy_checklist_answers', [
+            'followup_id' => $followup->id,
+            'question_id' => $question->id,
+            'answer_value' => '1',
+        ]);
+    }
+
     /** @return array{Therapy, Therapy} */
     private function seedTwoTenantTherapies(): array
     {

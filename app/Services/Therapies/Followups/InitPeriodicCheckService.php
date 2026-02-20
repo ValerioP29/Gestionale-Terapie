@@ -12,15 +12,17 @@ class InitPeriodicCheckService
 {
     public function handle(Therapy $therapy): TherapyFollowup
     {
-        $today = CarbonImmutable::today();
+        $romeNow = CarbonImmutable::now('Europe/Rome');
+        $startOfDayUtc = $romeNow->startOfDay()->setTimezone('UTC');
+        $endOfDayUtc = $romeNow->endOfDay()->setTimezone('UTC');
 
-        return DB::transaction(function () use ($therapy, $today): TherapyFollowup {
+        return DB::transaction(function () use ($therapy, $startOfDayUtc, $endOfDayUtc): TherapyFollowup {
             $followup = TherapyFollowup::query()
                 ->where('therapy_id', $therapy->id)
                 ->where('pharmacy_id', $therapy->pharmacy_id)
                 ->where('entry_type', 'check')
                 ->where('check_type', 'periodic')
-                ->whereDate('occurred_at', $today)
+                ->whereBetween('occurred_at', [$startOfDayUtc, $endOfDayUtc])
                 ->whereNull('canceled_at')
                 ->first();
 
@@ -30,7 +32,7 @@ class InitPeriodicCheckService
                     'pharmacy_id' => $therapy->pharmacy_id,
                     'entry_type' => 'check',
                     'check_type' => 'periodic',
-                    'occurred_at' => $today->toDateTimeString(),
+                    'occurred_at' => $startOfDayUtc,
                 ]);
             }
 
