@@ -6,15 +6,21 @@ use Carbon\CarbonImmutable;
 
 class ComputeNextDueAt
 {
+    private const CLINICAL_TIMEZONE = 'Europe/Rome';
+
     public function execute(CarbonImmutable $reference, string $frequency, ?int $weekday = null): ?CarbonImmutable
     {
-        return match ($frequency) {
+        $clinicalReference = $reference->setTimezone(self::CLINICAL_TIMEZONE);
+
+        $clinicalNext = match ($frequency) {
             'one_shot' => null,
-            'weekly' => $this->alignWeekday($reference->addWeek(), $weekday),
-            'biweekly' => $this->alignWeekday($reference->addWeeks(2), $weekday),
-            'monthly' => $this->computeMonthly($reference, $weekday),
+            'weekly' => $this->alignWeekday($clinicalReference->addWeek(), $weekday),
+            'biweekly' => $this->alignWeekday($clinicalReference->addWeeks(2), $weekday),
+            'monthly' => $this->computeMonthly($clinicalReference, $weekday),
             default => null,
         };
+
+        return $clinicalNext?->setTimezone('UTC');
     }
 
     private function alignWeekday(CarbonImmutable $date, ?int $weekday): CarbonImmutable

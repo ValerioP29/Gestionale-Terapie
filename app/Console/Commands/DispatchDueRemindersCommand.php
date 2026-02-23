@@ -17,7 +17,7 @@ class DispatchDueRemindersCommand extends Command
 
     public function handle(): int
     {
-        $now = Carbon::now();
+        $now = Carbon::now('Europe/Rome')->setTimezone('UTC');
 
         TherapyReminder::withoutGlobalScopes()
             ->where('status', 'active')
