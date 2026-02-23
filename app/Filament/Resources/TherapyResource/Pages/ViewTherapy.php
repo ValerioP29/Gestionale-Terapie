@@ -14,9 +14,6 @@ class ViewTherapy extends ViewRecord
     {
         return [
             Actions\EditAction::make(),
-            Actions\Action::make('followups')->label('Followups')->url(fn (): string => TherapyResource::getUrl('followups', ['record' => $this->record])),
-            Actions\Action::make('reminders')->label('Reminders')->url(fn (): string => TherapyResource::getUrl('reminders', ['record' => $this->record])),
-            Actions\Action::make('reports')->label('Reports')->url(fn (): string => TherapyResource::getUrl('reports', ['record' => $this->record])),
         ];
     }
 }
