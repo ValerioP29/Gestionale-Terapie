@@ -10,7 +10,7 @@ class MessageLogPolicy extends TenantPolicy
     protected function canAccessMessageLog(User $user, MessageLog $messageLog): bool
     {
         return $this->userMatchesTenant($user)
-            && ((int) $messageLog->pharma_id === $this->currentPharmacyId());
+            && ((int) $messageLog->pharmacy_id === $this->currentPharmacyId());
     }
 
     public function view(User $user, MessageLog $messageLog): bool

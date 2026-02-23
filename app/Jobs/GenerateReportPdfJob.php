@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\TherapyReport;
+use App\Presenters\TherapyReportPresenter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
@@ -31,9 +32,13 @@ class GenerateReportPdfJob implements ShouldQueue
             return;
         }
 
+        $report->loadMissing(['therapy.patient', 'therapy.currentChronicCare', 'therapy.latestSurvey', 'therapy.latestConsent', 'pharmacy']);
+
+        $presenter = new TherapyReportPresenter($report, (array) ($report->content ?? []));
+
         $pdf = Pdf::loadView('reports.pdf', [
             'report' => $report,
-            'content' => $report->content ?? [],
+            'presented' => $presenter->toArray(),
             'generatedAtRome' => CarbonImmutable::now('Europe/Rome')->format('d/m/Y H:i'),
             'validUntilRome' => $report->valid_until?->setTimezone('Europe/Rome')->format('d/m/Y H:i'),
         ]);

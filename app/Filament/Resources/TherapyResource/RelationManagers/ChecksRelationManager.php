@@ -17,7 +17,7 @@ class ChecksRelationManager extends RelationManager
 {
     protected static string $relationship = 'checks';
 
-    protected static ?string $title = 'Checks';
+    protected static ?string $title = 'Check periodici';
 
     public function form(Form $form): Form
     {
@@ -30,13 +30,14 @@ class ChecksRelationManager extends RelationManager
             ->defaultSort('occurred_at', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('occurred_at')->dateTime()->label('Avvenuto il'),
-                Tables\Columns\TextColumn::make('check_type')->badge(),
-                Tables\Columns\TextColumn::make('risk_score')->label('Rischio'),
-                Tables\Columns\TextColumn::make('follow_up_date')->date(),
+                Tables\Columns\TextColumn::make('check_type')->label('Tipologia')->badge()->formatStateUsing(fn (?string $state): string => $state === 'periodic' ? 'Periodico' : (string) $state),
+                Tables\Columns\TextColumn::make('risk_score')->label('Indice di rischio'),
+                Tables\Columns\TextColumn::make('follow_up_date')->label('Prossimo follow-up')->date(),
             ])
             ->headerActions([
                 Tables\Actions\Action::make('newPeriodicCheck')
                     ->label('Nuovo check periodico')
+                    ->tooltip('Compila il check periodico per aggiornare andamento clinico e pianificazione.')
                     ->icon('heroicon-o-plus')
                     ->mountUsing(function (Forms\Form $form): void {
                         $today = CarbonImmutable::today();
@@ -75,9 +76,9 @@ class ChecksRelationManager extends RelationManager
                     })
                     ->form(function (): array {
                         $fields = [
-                            Forms\Components\TextInput::make('risk_score')->numeric()->minValue(0)->maxValue(100),
-                            Forms\Components\DatePicker::make('follow_up_date'),
-                            Forms\Components\Textarea::make('pharmacist_notes')->rows(4)->columnSpanFull(),
+                            Forms\Components\TextInput::make('risk_score')->label('Indice di rischio (0-100)')->helperText('Valuta il rischio clinico percepito al momento del check.')->numeric()->minValue(0)->maxValue(100),
+                            Forms\Components\DatePicker::make('follow_up_date')->label('Data prossimo follow-up')->helperText('Data suggerita per il controllo successivo.'),
+                            Forms\Components\Textarea::make('pharmacist_notes')->label('Note del farmacista')->rows(4)->columnSpanFull(),
                         ];
 
                         $questions = $this->ownerRecord->checklistQuestions()

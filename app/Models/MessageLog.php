@@ -29,6 +29,23 @@ class MessageLog extends Model
         'sent_at' => 'datetime',
     ];
 
+    public function getPharmacyIdAttribute(): ?int
+    {
+        $value = $this->attributes['pharmacy_id'] ?? $this->attributes['pharma_id'] ?? null;
+
+        return $value !== null ? (int) $value : null;
+    }
+
+    public function setPharmacyIdAttribute(mixed $value): void
+    {
+        $this->attributes['pharma_id'] = is_numeric($value) ? (int) $value : null;
+    }
+
+    public function setPharmaIdAttribute(mixed $value): void
+    {
+        $this->attributes['pharma_id'] = is_numeric($value) ? (int) $value : null;
+    }
+
     public function pharmacy(): BelongsTo
     {
         return $this->belongsTo(Pharmacy::class, 'pharma_id');

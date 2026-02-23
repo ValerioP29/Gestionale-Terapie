@@ -9,6 +9,7 @@ use App\Tenancy\CurrentPharmacy;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use App\Exceptions\CurrentPharmacyNotResolvedException;
+use Illuminate\Validation\ValidationException;
 
 class CreateTherapyService
 {
@@ -44,6 +45,7 @@ class CreateTherapyService
     public function handle(array $payload): Therapy
     {
         $normalized = $this->normalizer->normalize($payload);
+        $this->validateMinimumRequirements($normalized);
 
         return DB::transaction(function () use ($normalized): Therapy {
             $tenantId = app(CurrentPharmacy::class)->getId();
@@ -97,7 +99,7 @@ class CreateTherapyService
         }
 
         $attributes = [
-            'primary_condition' => $normalized['primary_condition'] ?? 'unspecified',
+            'primary_condition' => $normalized['primary_condition'] ?? 'altro',
             'risk_score' => $normalized['risk_score'] ?? null,
             'notes_initial' => $normalized['notes_initial'] ?? null,
             'follow_up_date' => $normalized['follow_up_date'] ?? null,
@@ -111,5 +113,47 @@ class CreateTherapyService
         }
 
         $therapy->chronicCare()->updateOrCreate([], $attributes);
+    }
+
+    private function validateMinimumRequirements(array $normalized): void
+    {
+        $errors = [];
+
+        if (! isset($normalized['patient_id']) || ! is_numeric($normalized['patient_id'])) {
+            $errors['patient_id'] = 'Seleziona un paziente valido prima di salvare la terapia.';
+        }
+
+        $primaryCondition = trim((string) ($normalized['primary_condition'] ?? ''));
+
+        if ($primaryCondition === '') {
+            $errors['primary_condition'] = 'La condizione clinica principale è obbligatoria.';
+        }
+
+        $consent = $normalized['consent'] ?? null;
+        $requiredScopes = ['clinical_data', 'marketing', 'profiling'];
+        $scopes = collect((array) data_get($consent, 'scopes_json'))->map(fn (mixed $scope): string => (string) $scope);
+
+        if (! is_array($consent) || $consent === []) {
+            $errors['consent'] = 'Compila il consenso finale prima di completare la presa in carico.';
+        } else {
+            if (trim((string) data_get($consent, 'signer_name')) === '') {
+                $errors['consent.signer_name'] = 'Inserisci il nominativo del firmatario.';
+            }
+
+            if (data_get($consent, 'signed_at') === null) {
+                $errors['consent.signed_at'] = 'Indica data e ora della firma del consenso.';
+            }
+
+            foreach ($requiredScopes as $scope) {
+                if (! $scopes->contains($scope)) {
+                    $errors['consent.scopes_json'] = 'Per il percorso cronico sono obbligatori i 3 consensi minimi (follow-up, contatto, uso dati anonimizzati).';
+                    break;
+                }
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 }

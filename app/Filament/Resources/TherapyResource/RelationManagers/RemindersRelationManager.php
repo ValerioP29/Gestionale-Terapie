@@ -16,34 +16,37 @@ class RemindersRelationManager extends RelationManager
 {
     protected static string $relationship = 'reminders';
 
-    protected static ?string $title = 'Reminders';
+    protected static ?string $title = 'Promemoria';
 
     public function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\TextInput::make('title')->required()->maxLength(255),
+            Forms\Components\TextInput::make('title')->label('Titolo promemoria')->required()->maxLength(255),
             Forms\Components\Select::make('frequency')
+                ->label('Frequenza')
                 ->required()
                 ->live()
                 ->options([
-                    'one_shot' => 'One shot',
-                    'weekly' => 'Weekly',
-                    'biweekly' => 'Biweekly',
-                    'monthly' => 'Monthly',
+                    'one_shot' => 'Una tantum',
+                    'weekly' => 'Settimanale',
+                    'biweekly' => 'Ogni 2 settimane',
+                    'monthly' => 'Mensile',
                 ]),
             Forms\Components\Select::make('weekday')
+                ->label('Giorno della settimana')
                 ->nullable()
                 ->visible(fn (Forms\Get $get): bool => in_array($get('frequency'), ['weekly', 'biweekly'], true))
                 ->required(fn (Forms\Get $get): bool => in_array($get('frequency'), ['weekly', 'biweekly'], true))
                 ->options([
-                    1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday',
-                    5 => 'Friday', 6 => 'Saturday', 7 => 'Sunday',
+                    1 => 'Lunedì', 2 => 'Martedì', 3 => 'Mercoledì', 4 => 'Giovedì',
+                    5 => 'Venerdì', 6 => 'Sabato', 7 => 'Domenica',
                 ]),
-            Forms\Components\DateTimePicker::make('first_due_at')->required(),
+            Forms\Components\DateTimePicker::make('first_due_at')->label('Prima scadenza')->helperText('Data/ora iniziale da cui calcolare le prossime scadenze.')->required(),
             Forms\Components\Select::make('status')
                 ->required()
                 ->default('active')
-                ->options(['active' => 'Active', 'done' => 'Done', 'paused' => 'Paused']),
+                ->label('Stato')
+                ->options(['active' => 'Attivo', 'done' => 'Eseguito', 'paused' => 'In pausa', 'canceled' => 'Annullato (legacy)']),
         ])->columns(2);
     }
 
@@ -52,18 +55,18 @@ class RemindersRelationManager extends RelationManager
         return $table
             ->defaultSort('next_due_at')
             ->columns([
-                Tables\Columns\TextColumn::make('title')->searchable(),
-                Tables\Columns\TextColumn::make('frequency'),
-                Tables\Columns\TextColumn::make('next_due_at')->dateTime(),
-                Tables\Columns\TextColumn::make('last_done_at')->dateTime()->placeholder('-'),
-                Tables\Columns\TextColumn::make('status')->badge()->colors([
+                Tables\Columns\TextColumn::make('title')->label('Promemoria')->searchable(),
+                Tables\Columns\TextColumn::make('frequency')->label('Frequenza')->formatStateUsing(fn (?string $state): string => match ($state) { 'one_shot' => 'Una tantum', 'weekly' => 'Settimanale', 'biweekly' => 'Ogni 2 settimane', 'monthly' => 'Mensile', default => (string) $state, }),
+                Tables\Columns\TextColumn::make('next_due_at')->label('Prossima scadenza')->dateTime(),
+                Tables\Columns\TextColumn::make('last_done_at')->label('Ultima esecuzione')->dateTime()->placeholder('-'),
+                Tables\Columns\TextColumn::make('status')->label('Stato')->badge()->formatStateUsing(fn (?string $state): string => match ($state) { 'active' => 'Attivo', 'done' => 'Eseguito', 'paused' => 'In pausa', 'canceled' => 'Annullato (legacy)', default => (string) $state, })->colors([
                     'success' => 'done',
                     'warning' => 'paused',
                     'primary' => 'active',
                 ]),
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make()
+                Tables\Actions\CreateAction::make()->label('Aggiungi promemoria')
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['pharmacy_id'] = $this->ownerRecord->pharmacy_id;
                         $data['therapy_id'] = $this->ownerRecord->id;
@@ -73,23 +76,23 @@ class RemindersRelationManager extends RelationManager
                     }),
             ])
             ->actions([
-                Tables\Actions\EditAction::make()
+                Tables\Actions\EditAction::make()->label('Modifica')
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['next_due_at'] = $data['next_due_at'] ?? $data['first_due_at'];
 
                         return $data;
                     }),
                 Tables\Actions\Action::make('mark_done')
-                    ->label('Mark done')
+                    ->label('Segna come eseguito')
                     ->icon('heroicon-o-check-circle')
                     ->visible(fn (TherapyReminder $record): bool => $record->status !== 'done')
                     ->action(function (TherapyReminder $record): void {
                         app(ReminderService::class)->markDone($record);
 
-                        Notification::make()->success()->title('Reminder aggiornato')->send();
+                        Notification::make()->success()->title('Promemoria aggiornato')->send();
                     }),
                 Tables\Actions\Action::make('cancel_reminder')
-                    ->label('Cancel')
+                    ->label('Metti in pausa')
                     ->icon('heroicon-o-pause')
                     ->visible(fn (TherapyReminder $record): bool => $record->status === 'active')
                     ->action(function (TherapyReminder $record): void {
@@ -107,7 +110,7 @@ class RemindersRelationManager extends RelationManager
                             ],
                         );
 
-                        Notification::make()->success()->title('Reminder annullato')->send();
+                        Notification::make()->success()->title('Promemoria aggiornato')->send();
                     }),
             ]);
     }

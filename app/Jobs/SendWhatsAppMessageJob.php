@@ -33,7 +33,7 @@ class SendWhatsAppMessageJob implements ShouldQueue
         if (in_array($log->status, ['sent', 'failed'], true)) return;
 
         // Rate limit per farmacia (es: 10 msg / minuto)
-        $key = "wa:pharma:{$log->pharma_id}";
+        $key = "wa:pharmacy:{$log->pharmacy_id}";
         $allowed = RateLimiter::attempt($key, 10, function () {}, 60);
 
         if (!$allowed) {
@@ -45,7 +45,7 @@ class SendWhatsAppMessageJob implements ShouldQueue
         $log->update(['status' => 'sending', 'error' => null]);
 
         try {
-            $resp = $gateway->send($log->pharma_id, $log->to, $log->body);
+            $resp = $gateway->send((int) $log->pharmacy_id, $log->to, $log->body);
 
             $log->update([
                 'status' => 'sent',

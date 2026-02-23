@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Models\Patient;
 use App\Models\Assistant;
 use App\Tenancy\CurrentPharmacy;
+use App\Support\ConditionKeyNormalizer;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -26,7 +27,7 @@ class TherapyStoreRequest extends FormRequest
             'start_date' => ['nullable', 'date_format:Y-m-d'],
             'end_date' => ['nullable', 'date_format:Y-m-d'],
 
-            'primary_condition' => ['nullable', 'string', 'max:50'],
+            'primary_condition' => ['required', 'string', Rule::in(array_keys(ConditionKeyNormalizer::options()))],
             'chronic_care' => ['nullable', 'array'],
             'chronic_care.general_anamnesis' => ['nullable', 'array'],
             'chronic_care.detailed_intake' => ['nullable', 'array'],
@@ -40,11 +41,12 @@ class TherapyStoreRequest extends FormRequest
             'consent.signer_name' => ['required_with:consent', 'string', 'max:150'],
             'consent.signer_relation' => ['required_with:consent', Rule::in(['patient', 'caregiver', 'familiare'])],
             'consent.consent_text' => ['required_with:consent', 'string'],
-            'consent.signed_at' => ['nullable', 'date'],
-            'consent.scopes_json' => ['nullable', 'array'],
+            'consent.signed_at' => ['required_with:consent', 'date'],
+            'consent.scopes_json' => ['required_with:consent', 'array'],
+            'consent.scopes_json.*' => ['string', Rule::in(['privacy', 'marketing', 'profiling', 'clinical_data'])],
 
             'survey' => ['nullable', 'array'],
-            'survey.condition_type' => ['required_with:survey', 'string', 'max:50'],
+            'survey.condition_type' => ['required_with:survey', 'string', Rule::in(array_keys(ConditionKeyNormalizer::options()))],
             'survey.level' => ['required_with:survey', Rule::in(['base', 'approfondito'])],
             'survey.answers' => ['nullable', 'array'],
 
@@ -54,6 +56,20 @@ class TherapyStoreRequest extends FormRequest
                 'distinct',
                 Rule::exists(Assistant::class, 'id')->where(fn ($query) => $query->where('pharmacy_id', app(CurrentPharmacy::class)->getId())),
             ],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'patient_id.required' => 'Seleziona un paziente valido.',
+            'primary_condition.required' => 'La condizione clinica principale è obbligatoria.',
+            'primary_condition.in' => 'Seleziona una condizione clinica valida.',
+            'consent.signer_name.required_with' => 'Inserisci il nominativo del firmatario.',
+            'consent.signer_relation.required_with' => 'Seleziona il ruolo del firmatario.',
+            'consent.consent_text.required_with' => 'Inserisci il testo del consenso.',
+            'consent.signed_at.required_with' => 'Indica data e ora della firma del consenso.',
+            'consent.scopes_json.required_with' => 'Seleziona i consensi obbligatori per completare la presa in carico.',
         ];
     }
 }

@@ -4,6 +4,7 @@ namespace App\Services\Checklist;
 
 use App\Domain\Checklist\ChecklistRegistry;
 use App\Models\Therapy;
+use App\Support\ConditionKeyNormalizer;
 
 class EnsureTherapyChecklistService
 {
@@ -18,7 +19,7 @@ class EnsureTherapyChecklistService
             return;
         }
 
-        $conditionKey = (string) ($therapy->currentChronicCare?->primary_condition ?? 'unspecified');
+        $conditionKey = ConditionKeyNormalizer::normalize((string) ($therapy->currentChronicCare?->primary_condition ?? 'altro'));
         $defaults = $this->registry->forCondition($conditionKey);
 
         if ($defaults === []) {
