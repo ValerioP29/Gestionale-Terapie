@@ -30,6 +30,11 @@ class ChecklistRegistry
                 ['question_key' => 'misurazioni_settimanali', 'label' => 'Numero misurazioni settimanali', 'input_type' => 'number', 'default_active' => true, 'sort_order' => 20],
                 ['question_key' => 'aderenza_antipertensivi', 'label' => 'Aderenza terapia antipertensiva', 'input_type' => 'select', 'options_json' => ['ottima', 'parziale', 'scarsa'], 'default_active' => true, 'sort_order' => 30],
             ],
+            'altro' => [
+                ['question_key' => 'aderenza_generale', 'label' => 'Aderenza generale alla terapia', 'input_type' => 'select', 'options_json' => ['ottima', 'parziale', 'scarsa'], 'default_active' => true, 'sort_order' => 10],
+                ['question_key' => 'eventi_avversi', 'label' => 'Eventuali effetti indesiderati riferiti', 'input_type' => 'text', 'default_active' => true, 'sort_order' => 20],
+                ['question_key' => 'prossimo_controllo', 'label' => 'Necessità di controllo ravvicinato', 'input_type' => 'boolean', 'default_active' => true, 'sort_order' => 30],
+            ],
         ];
 
         return $map[$conditionKey] ?? [];

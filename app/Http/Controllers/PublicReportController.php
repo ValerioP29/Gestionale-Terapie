@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\TherapyReport;
+use App\Presenters\TherapyReportPresenter;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
@@ -16,9 +17,12 @@ class PublicReportController extends Controller
             ->where('valid_until', '>=', now())
             ->firstOrFail();
 
+        $report->loadMissing(['therapy.patient', 'therapy.currentChronicCare', 'therapy.latestSurvey', 'therapy.latestConsent', 'pharmacy']);
+        $presenter = new TherapyReportPresenter($report, (array) ($report->content ?? []));
+
         return view('reports.public-show', [
             'report' => $report,
-            'content' => $report->content ?? [],
+            'presented' => $presenter->toArray(),
             'pdfUrl' => $report->pdf_path !== null ? Storage::disk('public')->url($report->pdf_path) : null,
         ]);
     }

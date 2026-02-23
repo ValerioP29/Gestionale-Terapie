@@ -17,17 +17,17 @@ class MessageLogResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
     protected static ?string $navigationGroup = 'WhatsApp';
-    protected static ?string $navigationLabel = 'Message Logs';
+    protected static ?string $navigationLabel = 'Log messaggi';
 
     public static function form(Forms\Form $form): Forms\Form
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('pharma_id')->disabled(),
-                Forms\Components\TextInput::make('to')->disabled(),
-                Forms\Components\Textarea::make('body')->disabled(),
-                Forms\Components\TextInput::make('status')->disabled(),
-                Forms\Components\Textarea::make('error')->disabled(),
+                Forms\Components\TextInput::make('pharmacy_id')->label('Farmacia')->disabled(),
+                Forms\Components\TextInput::make('to')->label('Destinatario')->disabled(),
+                Forms\Components\Textarea::make('body')->label('Messaggio')->disabled(),
+                Forms\Components\TextInput::make('status')->label('Stato')->disabled(),
+                Forms\Components\Textarea::make('error')->label('Errore')->disabled(),
             ]);
     }
 
@@ -36,25 +36,39 @@ class MessageLogResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('id')->sortable(),
-                Tables\Columns\TextColumn::make('pharma_id')->sortable(),
-                Tables\Columns\TextColumn::make('to')->searchable(),
+                Tables\Columns\TextColumn::make('pharmacy_id')
+                    ->label('Farmacia')
+                    ->state(fn (MessageLog $record): string => (string) ($record->pharmacy_id ?? '-'))
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('pharma_id', $direction)),
+                Tables\Columns\TextColumn::make('to')->label('Destinatario')->searchable(),
                 Tables\Columns\TextColumn::make('status')
+                    ->label('Stato')
                     ->badge()
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'queued' => 'In coda',
+                        'sending' => 'In invio',
+                        'sent' => 'Inviato',
+                        'failed' => 'Fallito',
+                        default => $state,
+                    })
                     ->sortable(),
                 Tables\Columns\TextColumn::make('sent_at')
+                    ->label('Inviato il')
                     ->dateTime()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
+                    ->label('Creato il')
                     ->dateTime()
                     ->sortable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
+                    ->label('Stato')
                     ->options([
-                        'queued' => 'queued',
-                        'sending' => 'sending',
-                        'sent' => 'sent',
-                        'failed' => 'failed',
+                        'queued' => 'In coda',
+                        'sending' => 'In invio',
+                        'sent' => 'Inviato',
+                        'failed' => 'Fallito',
                     ]),
             ])
             ->actions([

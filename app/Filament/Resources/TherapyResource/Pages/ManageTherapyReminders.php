@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\TherapyResource\Pages;
 
 use App\Filament\Resources\TherapyResource;
-use App\Models\Therapy;
 use Filament\Resources\Pages\Page;
 
 class ManageTherapyReminders extends Page
@@ -12,10 +11,12 @@ class ManageTherapyReminders extends Page
 
     protected static string $view = 'filament.resources.therapy-resource.pages.placeholder';
 
-    public Therapy $record;
+    protected static bool $shouldRegisterNavigation = false;
 
     public function mount(int|string $record): void
     {
-        $this->record = TherapyResource::getEloquentQuery()->findOrFail($record);
+        $therapy = TherapyResource::getEloquentQuery()->findOrFail($record);
+
+        $this->redirect(TherapyResource::getUrl('view', ['record' => $therapy]));
     }
 }

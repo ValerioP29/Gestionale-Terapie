@@ -7,6 +7,7 @@ use App\Filament\Resources\TherapyResource\RelationManagers\ChecklistRelationMan
 use App\Filament\Resources\TherapyResource\RelationManagers\ChecksRelationManager;
 use App\Filament\Resources\TherapyResource\RelationManagers\FollowupsRelationManager;
 use App\Filament\Resources\TherapyResource\RelationManagers\RemindersRelationManager;
+use App\Filament\Resources\TherapyResource\RelationManagers\TimelineRelationManager;
 use App\Models\Assistant;
 use App\Models\Patient;
 use App\Models\Therapy;
@@ -16,6 +17,7 @@ use App\Presenters\TherapyPresenter;
 use App\Services\Patients\CreatePatientService;
 use App\Services\Patients\UpdatePatientService;
 use App\Services\Therapies\GenerateTherapyReportService;
+use App\Support\ConditionKeyNormalizer;
 use App\Tenancy\CurrentPharmacy;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -87,7 +89,7 @@ class TherapyResource extends Resource
                             return (string) $patient->id;
                         }),
                 ]),
-                Forms\Components\Wizard\Step::make('Tipologia percorso')->description('Scegli il tipo di programma per adattare i campi del wizard.')->schema([
+                Forms\Components\Wizard\Step::make('Percorso terapeutico')->description('Scegli il tipo di programma per adattare i campi del wizard.')->schema([
                     Forms\Components\Radio::make('ui_care_mode')
                         ->label('Tipo percorso')
                         ->options([
@@ -102,7 +104,11 @@ class TherapyResource extends Resource
                         ->label('Minimi obbligatori')
                         ->content(fn (Forms\Get $get): string => ($get('ui_care_mode') === 'fidelity')
                             ? 'Per la fidelizzazione compila almeno: Titolo terapia, Data inizio, Note terapia e Consenso.'
-                            : 'Per la presa in carico cronica compila almeno: Patologia principale, Indice di rischio, Questionario aderenza e Consenso.'),
+                            : 'Per la presa in carico cronica compila almeno: Paziente, Patologia principale, 3 consensi obbligatori e firma finale.'),
+                    Forms\Components\Placeholder::make('ui_completeness_badge')
+                        ->label('Stato presa in carico')
+                        ->content(fn (Forms\Get $get): string => self::completenessBadgeFromForm($get))
+                        ->columnSpanFull(),
                 ])->columns(1),
                 Forms\Components\Wizard\Step::make('Terapia')->schema([
                     Forms\Components\TextInput::make('therapy_title')->label('Titolo terapia')->required()->maxLength(255)->helperText('Usa un titolo chiaro, es. Terapia antipertensiva.'),
@@ -116,22 +122,22 @@ class TherapyResource extends Resource
                     Forms\Components\DatePicker::make('end_date')->label('Data fine')->afterOrEqual('start_date'),
                     Forms\Components\Textarea::make('therapy_description')->label('Note terapia')->rows(4)->helperText('Note operative visibili al team farmacia.')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') === 'fidelity'),
                 ])->columns(2),
-                Forms\Components\Wizard\Step::make('Valutazione clinica')->description('Inserisci il quadro clinico iniziale del paziente.')->schema([
-                    Forms\Components\TextInput::make('primary_condition')->label('Patologia/condizione principale')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->maxLength(50)->helperText('Es. ipertensione, diabete, bpco. Per percorso leggero sarà impostata automaticamente su fidelizzazione.')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->dehydrateStateUsing(fn (mixed $state, Forms\Get $get): string => $get('ui_care_mode') === 'fidelity' ? 'fidelizzazione' : (string) $state),
+                Forms\Components\Wizard\Step::make('Valutazione iniziale')->description('Inserisci il quadro clinico iniziale del paziente.')->schema([
+                    Forms\Components\Select::make('primary_condition')->label('Patologia/condizione principale')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options(ConditionKeyNormalizer::options())->helperText('Seleziona una condizione standardizzata per allineare checklist e report.')->validationMessages(['required' => 'La condizione clinica principale è obbligatoria.'])->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->dehydrateStateUsing(fn (mixed $state, Forms\Get $get): string => $get('ui_care_mode') === 'fidelity' ? 'altro' : ConditionKeyNormalizer::normalize((string) $state)),
                     Forms\Components\TextInput::make('risk_score')->label('Indice di rischio (0-100)')->numeric()->minValue(0)->maxValue(100)->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
                     Forms\Components\DatePicker::make('follow_up_date')->label('Prossimo follow-up suggerito')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
                     Forms\Components\Textarea::make('notes_initial')->label('Note cliniche iniziali')->helperText('Riassunto clinico iniziale utile al monitoraggio.')->columnSpanFull()->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
-                    self::jsonRepeater('chronic_care.care_context', 'Care context'),
-                    self::jsonRepeater('chronic_care.doctor_info', 'Doctor info'),
-                    self::jsonRepeater('chronic_care.general_anamnesis', 'General anamnesis'),
-                    self::jsonRepeater('chronic_care.biometric_info', 'Biometric info'),
-                    self::jsonRepeater('chronic_care.detailed_intake', 'Detailed intake'),
-                    self::jsonRepeater('chronic_care.adherence_base', 'Adherence base'),
-                    self::jsonRepeater('chronic_care.flags', 'Flags'),
+                    self::jsonRepeater('chronic_care.care_context', 'Contesto assistenziale'),
+                    self::jsonRepeater('chronic_care.doctor_info', 'Informazioni medico curante'),
+                    self::jsonRepeater('chronic_care.general_anamnesis', 'Anamnesi generale'),
+                    self::jsonRepeater('chronic_care.biometric_info', 'Dati biometrici'),
+                    self::jsonRepeater('chronic_care.detailed_intake', 'Dettaglio assunzione terapia'),
+                    self::jsonRepeater('chronic_care.adherence_base', 'Valutazione base aderenza'),
+                    self::jsonRepeater('chronic_care.flags', 'Segnalazioni cliniche'),
                     Forms\Components\KeyValue::make('chronic_consent')->label('Consenso clinico')->helperText('Usa coppie chiave/valore solo per note interne non strutturate.')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
                 ])->columns(2),
-                Forms\Components\Wizard\Step::make('Questionario aderenza')->description("Compila il questionario iniziale per monitorare l'aderenza.")->schema([
-                    Forms\Components\TextInput::make('survey.condition_type')->label('Condizione di riferimento')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->maxLength(50)->live()->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
+                Forms\Components\Wizard\Step::make('Questionario di aderenza')->description("Compila il questionario iniziale per monitorare l'aderenza.")->schema([
+                    Forms\Components\Select::make('survey.condition_type')->label('Condizione di riferimento')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options(ConditionKeyNormalizer::options())->default(fn (Forms\Get $get): ?string => $get('primary_condition'))->live()->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->helperText('Usa la stessa condizione clinica della presa in carico.'),
                     Forms\Components\Select::make('survey.level')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options([
                         'base' => 'Base',
                         'approfondito' => 'Approfondito',
@@ -139,6 +145,8 @@ class TherapyResource extends Resource
                     Forms\Components\Repeater::make('survey.answers')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
                         ->schema([
                             Forms\Components\Select::make('question_key')
+                                ->label('Domanda checklist')
+                                ->helperText('Seleziona la domanda da monitorare nel questionario di aderenza.')
                                 ->required()
                                 ->searchable()
                                 ->options(function (Forms\Get $get): array {
@@ -171,33 +179,51 @@ class TherapyResource extends Resource
                         ->defaultItems(0)
                         ->columnSpanFull(),
                 ])->columns(2),
-                Forms\Components\Wizard\Step::make('Consensi')->schema([
-                    Forms\Components\TextInput::make('consent.signer_name')->required()->maxLength(150),
+                Forms\Components\Wizard\Step::make('Consenso informato')->schema([
+                    Forms\Components\TextInput::make('consent.signer_name')->label('Nome e cognome firmatario')->required()->maxLength(150)->validationMessages(['required' => 'Inserisci il nominativo del firmatario.']),
                     Forms\Components\Select::make('consent.signer_relation')->required()->options([
-                        'patient' => 'Patient',
+                        'patient' => 'Paziente',
                         'caregiver' => 'Caregiver',
                         'familiare' => 'Familiare',
                     ]),
-                    Forms\Components\TextInput::make('consent.signer_role')->maxLength(20),
-                    Forms\Components\DateTimePicker::make('consent.signed_at'),
-                    Forms\Components\Textarea::make('consent.consent_text')->required()->columnSpanFull(),
+                    Forms\Components\TextInput::make('consent.signer_role')->label('Ruolo firmatario (facoltativo)')->maxLength(20),
+                    Forms\Components\DateTimePicker::make('consent.signed_at')->label('Data e ora firma')->required()->validationMessages(['required' => 'Indica data e ora della firma del consenso.']),
+                    Forms\Components\Textarea::make('consent.consent_text')->label('Testo consenso')->required()->columnSpanFull(),
                     Forms\Components\CheckboxList::make('consent.scopes_json')
+                        ->helperText('Per la presa in carico cronica seleziona tutti e tre i consensi minimi.')
                         ->options([
                             'privacy' => 'Privacy',
                             'marketing' => 'Marketing',
-                            'profiling' => 'Profiling',
-                            'clinical_data' => 'Clinical data',
+                            'profiling' => 'Uso dati anonimizzati',
+                            'clinical_data' => 'Follow-up clinico',
                         ])
                         ->columns(2)
+                        ->required()
+                        ->validationMessages(['required' => 'Seleziona i consensi obbligatori per completare la presa in carico.'])
                         ->columnSpanFull(),
+                    Forms\Components\Toggle::make('consent.consent_care_followup')
+                        ->label('Acconsento ai follow-up di presa in carico')
+                        ->default(false)
+                        ->accepted(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
+                        ->validationMessages(['accepted' => 'Conferma il consenso ai follow-up.']),
+                    Forms\Components\Toggle::make('consent.consent_contact')
+                        ->label('Acconsento a essere contattato per promemoria e comunicazioni')
+                        ->default(false)
+                        ->accepted(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
+                        ->validationMessages(['accepted' => 'Conferma il consenso ai contatti.']),
+                    Forms\Components\Toggle::make('consent.consent_anonymous')
+                        ->label('Acconsento all\'uso anonimizzato dei dati')
+                        ->default(false)
+                        ->accepted(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
+                        ->validationMessages(['accepted' => 'Conferma il consenso all\'uso anonimizzato dei dati.']),
                     Forms\Components\FileUpload::make('consent.signature_path')
-                        ->label('Firma (opzionale)')
+                        ->label('Firma (facoltativa: allega immagine se disponibile)')
                         ->disk(config('filesystems.default'))
                         ->directory('therapy-signatures')
                         ->acceptedFileTypes(['image/png', 'image/jpeg'])
                         ->columnSpanFull(),
                 ])->columns(2),
-                Forms\Components\Wizard\Step::make('Assistenti/Caregiver')->schema([
+                Forms\Components\Wizard\Step::make('Caregiver e assistenti')->schema([
                     Forms\Components\Repeater::make('assistants')->helperText('Associa caregiver/familiari da contattare per promemoria e follow-up.')
                         ->schema([
                             Forms\Components\Select::make('assistant_id')
@@ -243,14 +269,19 @@ class TherapyResource extends Resource
                 TextEntry::make('start_date')->date(),
                 TextEntry::make('end_date')->date(),
                 TextEntry::make('therapy_description')->label('Note')->columnSpanFull(),
+                TextEntry::make('presa_in_carico')
+                    ->label('Presa in carico')
+                    ->badge()
+                    ->state(fn (Therapy $record): string => self::isTherapyComplete($record) ? 'Completa' : 'Incompleta')
+                    ->color(fn (Therapy $record): string => self::isTherapyComplete($record) ? 'success' : 'danger'),
             ])->columns(2),
-            InfolistSection::make('Chronic care')->schema([
-                TextEntry::make('currentChronicCare.primary_condition'),
+            InfolistSection::make('Presa in carico clinica')->schema([
+                TextEntry::make('currentChronicCare.primary_condition')->label('Condizione principale')->formatStateUsing(fn (?string $state): string => ConditionKeyNormalizer::options()[$state ?? ''] ?? ($state ?? 'N/D')),
                 TextEntry::make('currentChronicCare.risk_score'),
                 TextEntry::make('currentChronicCare.follow_up_date')->date(),
                 TextEntry::make('currentChronicCare.notes_initial')->columnSpanFull(),
             ])->columns(2),
-            InfolistSection::make('Survey')->schema([
+            InfolistSection::make('Questionario di aderenza')->schema([
                 TextEntry::make('latestSurvey.condition_type'),
                 TextEntry::make('latestSurvey.level')->badge(),
                 TextEntry::make('survey_readable')
@@ -288,7 +319,7 @@ class TherapyResource extends Resource
                     ->searchable(query: fn (Builder $query, string $search): Builder => $query->whereHas('patient', fn (Builder $patientQuery) => $patientQuery
                         ->where('first_name', 'ilike', "%{$search}%")
                         ->orWhere('last_name', 'ilike', "%{$search}%"))),
-                Tables\Columns\TextColumn::make('primary_condition')->state(fn (Therapy $record): string => $record->currentChronicCare?->primary_condition ?? '-'),
+                Tables\Columns\TextColumn::make('primary_condition')->label('Condizione')->state(fn (Therapy $record): string => ConditionKeyNormalizer::options()[$record->currentChronicCare?->primary_condition ?? ''] ?? ($record->currentChronicCare?->primary_condition ?? '-')),
                 Tables\Columns\TextColumn::make('status')->badge()->sortable(),
                 Tables\Columns\TextColumn::make('start_date')->date()->sortable(),
                 Tables\Columns\TextColumn::make('next_due')->label('Prossima scadenza')->state(fn (Therapy $record): string => optional($record->reminders->sortBy('next_due_at')->first()?->next_due_at)?->format('Y-m-d H:i') ?? '-'),
@@ -341,12 +372,12 @@ class TherapyResource extends Resource
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\Action::make('generate_pdf')
-                    ->label('Generate report PDF')
+                    ->label('Genera report PDF')
                     ->icon('heroicon-o-document-arrow-down')
                     ->action(function (Therapy $record): void {
                         app(GenerateTherapyReportService::class)->handle($record);
 
-                        Notification::make()->success()->title('Report generation avviata')->send();
+                        Notification::make()->success()->title('Generazione report avviata')->send();
                     }),
             ]);
     }
@@ -369,6 +400,7 @@ class TherapyResource extends Resource
     public static function getRelations(): array
     {
         return [
+            TimelineRelationManager::class,
             ChecklistRelationManager::class,
             FollowupsRelationManager::class,
             ChecksRelationManager::class,
@@ -413,6 +445,58 @@ class TherapyResource extends Resource
             ])
             ->defaultItems(0)
             ->columnSpanFull();
+    }
+
+    private static function completenessBadgeFromForm(Forms\Get $get): string
+    {
+        if ($get('ui_care_mode') === 'fidelity') {
+            return 'Percorso fidelizzazione: requisiti ridotti.';
+        }
+
+        $isComplete = self::isFormComplete($get);
+
+        return $isComplete
+            ? '✅ Presa in carico completa'
+            : '⚠️ Presa in carico incompleta: verifica condizione clinica e consensi finali.';
+    }
+
+    private static function isFormComplete(Forms\Get $get): bool
+    {
+        $patientId = $get('patient_id');
+        $primaryCondition = trim((string) ($get('primary_condition') ?? ''));
+        $signerName = trim((string) ($get('consent.signer_name') ?? ''));
+        $signedAt = $get('consent.signed_at');
+        $consentFlags = [
+            (bool) $get('consent.consent_care_followup'),
+            (bool) $get('consent.consent_contact'),
+            (bool) $get('consent.consent_anonymous'),
+        ];
+
+        return is_numeric($patientId)
+            && $primaryCondition !== ''
+            && $primaryCondition !== 'altro'
+            && $signerName !== ''
+            && $signedAt !== null
+            && ! in_array(false, $consentFlags, true);
+    }
+
+    private static function isTherapyComplete(Therapy $record): bool
+    {
+        $record->loadMissing(['patient', 'currentChronicCare', 'latestConsent']);
+
+        $primaryCondition = trim((string) ($record->currentChronicCare?->primary_condition ?? ''));
+        $consent = $record->latestConsent;
+        $scopes = collect((array) ($consent?->scopes_json ?? []));
+
+        return $record->patient_id !== null
+            && $primaryCondition !== ''
+            && $primaryCondition !== 'altro'
+            && $consent !== null
+            && trim((string) $consent->signer_name) !== ''
+            && $consent->signed_at !== null
+            && $scopes->contains('clinical_data')
+            && $scopes->contains('marketing')
+            && $scopes->contains('profiling');
     }
 
     private static function searchPatients(string $search): array
@@ -504,7 +588,7 @@ class TherapyResource extends Resource
         $chronicCareTable = (new TherapyChronicCare())->getTable();
         $therapyTable = (new Therapy())->getTable();
 
-        return TherapyChronicCare::query()
+        $keys = TherapyChronicCare::query()
             ->select("{$chronicCareTable}.primary_condition")
             ->join($therapyTable, "{$therapyTable}.id", '=', "{$chronicCareTable}.therapy_id")
             ->where("{$therapyTable}.pharmacy_id", $tenantId)
@@ -512,7 +596,15 @@ class TherapyResource extends Resource
             ->distinct()
             ->orderBy("{$chronicCareTable}.primary_condition")
             ->limit(100)
-            ->pluck("{$chronicCareTable}.primary_condition", "{$chronicCareTable}.primary_condition")
+            ->pluck("{$chronicCareTable}.primary_condition")
+            ->map(fn (string $condition): string => ConditionKeyNormalizer::normalize($condition))
+            ->unique()
+            ->values();
+
+        $labels = ConditionKeyNormalizer::options();
+
+        return $keys
+            ->mapWithKeys(fn (string $key): array => [$key => ($labels[$key] ?? ucfirst($key))])
             ->all();
     }
 }

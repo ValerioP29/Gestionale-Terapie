@@ -2,6 +2,7 @@
 
 namespace App\Services\Therapies;
 
+use App\Support\ConditionKeyNormalizer;
 use Carbon\Carbon;
 
 class TherapyPayloadNormalizer
@@ -30,11 +31,19 @@ class TherapyPayloadNormalizer
         }
 
         if (isset($normalized['consent']) && is_array($normalized['consent'])) {
-            $normalized['consent'] = $this->normalizeValue($normalized['consent']);
+            $normalized['consent'] = $this->normalizeConsent($normalized['consent']);
         }
 
         if (isset($normalized['survey']) && is_array($normalized['survey'])) {
             $normalized['survey'] = $this->normalizeValue($normalized['survey']);
+        }
+
+        if (array_key_exists('primary_condition', $normalized)) {
+            $normalized['primary_condition'] = ConditionKeyNormalizer::normalize((string) $normalized['primary_condition']);
+        }
+
+        if (isset($normalized['survey']) && is_array($normalized['survey']) && array_key_exists('condition_type', $normalized['survey'])) {
+            $normalized['survey']['condition_type'] = ConditionKeyNormalizer::normalize((string) $normalized['survey']['condition_type']);
         }
 
         return $normalized;
@@ -134,5 +143,38 @@ class TherapyPayloadNormalizer
         }
 
         return is_array($value) && $value === [];
+    }
+
+    /** @param array<string, mixed> $consent */
+    private function normalizeConsent(array $consent): array
+    {
+        $normalized = $this->normalizeValue($consent);
+
+        if (! is_array($normalized)) {
+            return [];
+        }
+
+        $scopes = collect((array) ($normalized['scopes_json'] ?? []))
+            ->map(fn (mixed $scope): string => trim((string) $scope))
+            ->filter()
+            ->values();
+
+        $legacyMapping = [
+            'consent_care_followup' => 'clinical_data',
+            'consent_contact' => 'marketing',
+            'consent_anonymous' => 'profiling',
+        ];
+
+        foreach ($legacyMapping as $legacyKey => $scope) {
+            if (($normalized[$legacyKey] ?? false) === true && ! $scopes->contains($scope)) {
+                $scopes->push($scope);
+            }
+        }
+
+        if ($scopes->isNotEmpty()) {
+            $normalized['scopes_json'] = $scopes->unique()->values()->all();
+        }
+
+        return $normalized;
     }
 }

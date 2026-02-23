@@ -23,9 +23,13 @@ class GenerateTherapyReportService
                 'patient',
                 'chronicCare',
                 'conditionSurveys',
-                'followups',
+                'followups.checklistAnswers.question',
                 'reminders',
+                'consents',
+                'pharmacy',
             ]);
+
+            $generatedBy = auth()->user();
 
             $report = TherapyReport::query()->create([
                 'pharmacy_id' => $therapy->pharmacy_id,
@@ -39,6 +43,19 @@ class GenerateTherapyReportService
                     'survey' => $therapy->conditionSurveys->map->toArray()->all(),
                     'followups' => $therapy->followups->map->toArray()->all(),
                     'reminders' => $therapy->reminders->map->toArray()->all(),
+                    'consents' => $therapy->consents->map->toArray()->all(),
+                    'checklist_answers' => $therapy->followups
+                        ->flatMap(fn ($followup) => $followup->checklistAnswers->map(fn ($answer) => [
+                            'question_label' => (string) ($answer->question?->label ?? 'Domanda checklist'),
+                            'answer_value' => $answer->answer_value,
+                            'answered_at' => $answer->answered_at?->toIso8601String(),
+                        ]))
+                        ->values()
+                        ->all(),
+                    'generated_by' => [
+                        'name' => $generatedBy?->name,
+                        'email' => $generatedBy?->email,
+                    ],
                     'generated_at' => now()->toIso8601String(),
                 ],
             ]);

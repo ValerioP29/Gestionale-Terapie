@@ -9,6 +9,7 @@ use App\Tenancy\CurrentPharmacy;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use App\Exceptions\CurrentPharmacyNotResolvedException;
+use Illuminate\Validation\ValidationException;
 
 class UpdateTherapyService
 {
@@ -46,6 +47,8 @@ class UpdateTherapyService
             $therapy = Therapy::query()
                 ->where('pharmacy_id', $tenantId)
                 ->findOrFail($therapyId);
+
+            $this->validateMinimumRequirementsForUpdate($therapy, $normalized);
 
             $updates = [];
 
@@ -101,6 +104,52 @@ class UpdateTherapyService
         });
     }
 
+    private function validateMinimumRequirementsForUpdate(Therapy $therapy, array $normalized): void
+    {
+        $errors = [];
+
+        if (array_key_exists('patient_id', $normalized) && ! is_numeric($normalized['patient_id'])) {
+            $errors['patient_id'] = 'Seleziona un paziente valido prima di salvare la terapia.';
+        }
+
+        if (array_key_exists('primary_condition', $normalized)) {
+            $primaryCondition = trim((string) ($normalized['primary_condition'] ?? ''));
+
+            if ($primaryCondition === '') {
+                $errors['primary_condition'] = 'La condizione clinica principale è obbligatoria.';
+            }
+        }
+
+        if (array_key_exists('consent', $normalized)) {
+            $consent = $normalized['consent'];
+            $requiredScopes = ['clinical_data', 'marketing', 'profiling'];
+            $scopes = collect((array) data_get($consent, 'scopes_json'))->map(fn (mixed $scope): string => (string) $scope);
+
+            if (! is_array($consent) || $consent === []) {
+                $errors['consent'] = 'Compila il consenso finale prima di completare la presa in carico.';
+            } else {
+                if (trim((string) data_get($consent, 'signer_name')) === '') {
+                    $errors['consent.signer_name'] = 'Inserisci il nominativo del firmatario.';
+                }
+
+                if (data_get($consent, 'signed_at') === null) {
+                    $errors['consent.signed_at'] = 'Indica data e ora della firma del consenso.';
+                }
+
+                foreach ($requiredScopes as $scope) {
+                    if (! $scopes->contains($scope)) {
+                        $errors['consent.scopes_json'] = 'Per il percorso cronico sono obbligatori i 3 consensi minimi (follow-up, contatto, uso dati anonimizzati).';
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
     private function syncChronicCare(Therapy $therapy, array $normalized): void
     {
         $hasChronicCareBlocks = isset($normalized['chronic_care'])
@@ -123,7 +172,7 @@ class UpdateTherapyService
 
         if ($existing === null) {
             $existing = $therapy->chronicCare()->create([
-                'primary_condition' => $normalized['primary_condition'] ?? 'unspecified',
+                'primary_condition' => $normalized['primary_condition'] ?? 'altro',
             ]);
         }
 

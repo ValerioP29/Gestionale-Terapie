@@ -44,6 +44,9 @@ class EditTherapy extends EditRecord
             'consent_text' => $record->latestConsent->consent_text,
             'signed_at' => $record->latestConsent->signed_at,
             'scopes_json' => $record->latestConsent->scopes_json,
+            'consent_care_followup' => in_array('clinical_data', (array) $record->latestConsent->scopes_json, true),
+            'consent_contact' => in_array('marketing', (array) $record->latestConsent->scopes_json, true),
+            'consent_anonymous' => in_array('profiling', (array) $record->latestConsent->scopes_json, true),
         ] : [];
 
         $data['assistants'] = $record->assistants->map(fn ($assistant): array => [
