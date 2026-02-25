@@ -20,6 +20,7 @@ use App\Services\Therapies\GenerateTherapyReportService;
 use App\Support\ConditionKeyNormalizer;
 use App\Tenancy\CurrentPharmacy;
 use Filament\Forms;
+use Filament\Forms\Components\Actions\Action;
 use Filament\Forms\Form;
 use Filament\Infolists\Components\Section as InfolistSection;
 use Filament\Infolists\Components\TextEntry;
@@ -39,6 +40,16 @@ class TherapyResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-heart';
     protected static ?string $navigationGroup = 'Terapie';
+
+    public static function getModelLabel(): string
+    {
+        return 'terapia';
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return 'terapie';
+    }
 
     public static function form(Form $form): Form
     {
@@ -111,37 +122,58 @@ class TherapyResource extends Resource
                         ->columnSpanFull(),
                 ])->columns(1),
                 Forms\Components\Wizard\Step::make('Terapia')->schema([
-                    Forms\Components\TextInput::make('therapy_title')->label('Titolo terapia')->required()->maxLength(255)->helperText('Usa un titolo chiaro, es. Terapia antipertensiva.'),
+                    Forms\Components\TextInput::make('therapy_title')->label('Titolo terapia')->required()->maxLength(255)->helperText('Usa un titolo chiaro, es. Terapia antipertensiva.')->validationMessages(['required' => 'Inserisci il titolo della terapia.']),
                     Forms\Components\Select::make('status')->required()->options([
                         'active' => 'Attiva',
                         'planned' => 'Pianificata',
                         'completed' => 'Completata',
                         'suspended' => 'Sospesa',
-                    ])->default('active'),
-                    Forms\Components\DatePicker::make('start_date')->label('Data inizio'),
-                    Forms\Components\DatePicker::make('end_date')->label('Data fine')->afterOrEqual('start_date'),
-                    Forms\Components\Textarea::make('therapy_description')->label('Note terapia')->rows(4)->helperText('Note operative visibili al team farmacia.')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') === 'fidelity'),
+                    ])->default('active')->validationMessages(['required' => 'Seleziona lo stato della terapia.']),
+                    Forms\Components\DatePicker::make('start_date')->label('Data inizio')->placeholder('Seleziona la data di avvio della terapia.'),
+                    Forms\Components\DatePicker::make('end_date')->label('Data fine')->placeholder('Seleziona la data di chiusura, se prevista.')->afterOrEqual('start_date')->validationMessages(['after_or_equal' => 'La data di fine deve essere uguale o successiva alla data di inizio.']),
+                    Forms\Components\Textarea::make('therapy_description')->label('Note terapia')->rows(4)->helperText('Note operative visibili al team farmacia.')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') === 'fidelity')->validationMessages(['required' => 'Per la fidelizzazione compila le note terapia.']),
                 ])->columns(2),
-                Forms\Components\Wizard\Step::make('Valutazione iniziale')->description('Inserisci il quadro clinico iniziale del paziente.')->schema([
-                    Forms\Components\Select::make('primary_condition')->label('Patologia/condizione principale')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options(ConditionKeyNormalizer::options())->helperText('Seleziona una condizione standardizzata per allineare checklist e report.')->validationMessages(['required' => 'La condizione clinica principale è obbligatoria.'])->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->dehydrateStateUsing(fn (mixed $state, Forms\Get $get): string => $get('ui_care_mode') === 'fidelity' ? 'altro' : ConditionKeyNormalizer::normalize((string) $state)),
-                    Forms\Components\TextInput::make('risk_score')->label('Indice di rischio (0-100)')->numeric()->minValue(0)->maxValue(100)->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
+                Forms\Components\Wizard\Step::make('Valutazione iniziale')->description('Inserisci solo le note cliniche iniziali e le domande strutturate del primo colloquio.')->schema([
+                    Forms\Components\TextInput::make('risk_score')->label('Indice di rischio (0-100)')->numeric()->minValue(0)->maxValue(100)->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->validationMessages([
+                        'numeric' => 'L\'indice di rischio deve essere numerico.',
+                        'min' => 'L\'indice di rischio non può essere inferiore a 0.',
+                        'max' => 'L\'indice di rischio non può superare 100.',
+                    ]),
                     Forms\Components\DatePicker::make('follow_up_date')->label('Prossimo follow-up suggerito')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
                     Forms\Components\Textarea::make('notes_initial')->label('Note cliniche iniziali')->helperText('Riassunto clinico iniziale utile al monitoraggio.')->columnSpanFull()->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
-                    self::jsonRepeater('chronic_care.care_context', 'Contesto assistenziale'),
-                    self::jsonRepeater('chronic_care.doctor_info', 'Informazioni medico curante'),
-                    self::jsonRepeater('chronic_care.general_anamnesis', 'Anamnesi generale'),
-                    self::jsonRepeater('chronic_care.biometric_info', 'Dati biometrici'),
-                    self::jsonRepeater('chronic_care.detailed_intake', 'Dettaglio assunzione terapia'),
-                    self::jsonRepeater('chronic_care.adherence_base', 'Valutazione base aderenza'),
-                    self::jsonRepeater('chronic_care.flags', 'Segnalazioni cliniche'),
-                    Forms\Components\KeyValue::make('chronic_consent')->label('Consenso clinico')->helperText('Usa coppie chiave/valore solo per note interne non strutturate.')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
+                    self::clinicalQuestionsRepeater('chronic_care.care_context', 'Contesto assistenziale', config('therapy_clinical_questions.care_context', [])),
+                    Forms\Components\Section::make('Medico curante / Specialista')
+                        ->description('Compila i riferimenti del medico curante e, se disponibile, dello specialista.')
+                        ->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
+                        ->schema([
+                            Forms\Components\Fieldset::make('Medico curante')->schema([
+                                Forms\Components\TextInput::make('chronic_care.doctor_info.medico_curante.nome')->label('Nome')->maxLength(100),
+                                Forms\Components\TextInput::make('chronic_care.doctor_info.medico_curante.cognome')->label('Cognome')->maxLength(100),
+                                Forms\Components\TextInput::make('chronic_care.doctor_info.medico_curante.email')->label('E-mail')->email()->maxLength(150),
+                                Forms\Components\TextInput::make('chronic_care.doctor_info.medico_curante.telefono')->label('Telefono')->tel()->maxLength(30),
+                            ])->columns(2),
+                            Forms\Components\Fieldset::make('Specialista (facoltativo)')->schema([
+                                Forms\Components\TextInput::make('chronic_care.doctor_info.specialista.nome')->label('Nome')->maxLength(100),
+                                Forms\Components\TextInput::make('chronic_care.doctor_info.specialista.cognome')->label('Cognome')->maxLength(100),
+                                Forms\Components\TextInput::make('chronic_care.doctor_info.specialista.email')->label('E-mail')->email()->maxLength(150),
+                                Forms\Components\TextInput::make('chronic_care.doctor_info.specialista.telefono')->label('Telefono')->tel()->maxLength(30),
+                            ])->columns(2),
+                        ])
+                        ->columns(1)
+                        ->columnSpanFull(),
+                    self::clinicalQuestionsRepeater('chronic_care.general_anamnesis', 'Anamnesi generale', config('therapy_clinical_questions.general_anamnesis', [])),
+                    self::clinicalQuestionsRepeater('chronic_care.biometric_info', 'Dati biometrici', config('therapy_clinical_questions.biometric_info', [])),
+                    self::clinicalQuestionsRepeater('chronic_care.detailed_intake', 'Dettaglio assunzione terapia', config('therapy_clinical_questions.detailed_intake', [])),
+                    self::clinicalQuestionsRepeater('chronic_care.adherence_base', 'Valutazione base aderenza', config('therapy_clinical_questions.adherence_base', [])),
+                    self::clinicalQuestionsRepeater('chronic_care.flags', 'Segnalazioni cliniche', config('therapy_clinical_questions.flags', [])),
                 ])->columns(2),
-                Forms\Components\Wizard\Step::make('Questionario di aderenza')->description("Compila il questionario iniziale per monitorare l'aderenza.")->schema([
+                Forms\Components\Wizard\Step::make('Questionario di aderenza')->description("Definisci la patologia principale e compila il questionario iniziale per monitorare l'aderenza.")->schema([
+                    Forms\Components\Select::make('primary_condition')->label('Patologia/condizione principale')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options(ConditionKeyNormalizer::options())->helperText('Seleziona una condizione standardizzata per allineare checklist e report.')->validationMessages(['required' => 'La condizione clinica principale è obbligatoria.'])->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->dehydrateStateUsing(fn (mixed $state, Forms\Get $get): string => $get('ui_care_mode') === 'fidelity' ? 'altro' : ConditionKeyNormalizer::normalize((string) $state)),
                     Forms\Components\Select::make('survey.condition_type')->label('Condizione di riferimento')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options(ConditionKeyNormalizer::options())->default(fn (Forms\Get $get): ?string => $get('primary_condition'))->live()->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->helperText('Usa la stessa condizione clinica della presa in carico.'),
-                    Forms\Components\Select::make('survey.level')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options([
+                    Forms\Components\Select::make('survey.level')->label('Livello questionario')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options([
                         'base' => 'Base',
                         'approfondito' => 'Approfondito',
-                    ]),
+                    ])->validationMessages(['required' => 'Seleziona il livello del questionario.']),
                     Forms\Components\Repeater::make('survey.answers')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
                         ->schema([
                             Forms\Components\Select::make('question_key')
@@ -188,7 +220,7 @@ class TherapyResource extends Resource
                     ]),
                     Forms\Components\TextInput::make('consent.signer_role')->label('Ruolo firmatario (facoltativo)')->maxLength(20),
                     Forms\Components\DateTimePicker::make('consent.signed_at')->label('Data e ora firma')->required()->validationMessages(['required' => 'Indica data e ora della firma del consenso.']),
-                    Forms\Components\Textarea::make('consent.consent_text')->label('Testo consenso')->required()->columnSpanFull(),
+                    Forms\Components\Textarea::make('consent.consent_text')->label('Testo consenso')->required()->columnSpanFull()->validationMessages(['required' => 'Inserisci il testo del consenso informato.']),
                     Forms\Components\CheckboxList::make('consent.scopes_json')
                         ->helperText('Per la presa in carico cronica seleziona tutti e tre i consensi minimi.')
                         ->options([
@@ -236,8 +268,8 @@ class TherapyResource extends Resource
                                 'familiare' => 'Familiare',
                             ]),
                             Forms\Components\Select::make('contact_channel')->options([
-                                'phone' => 'Phone',
-                                'email' => 'Email',
+                                'phone' => 'Telefono',
+                                'email' => 'E-mail',
                                 'whatsapp' => 'WhatsApp',
                             ]),
                             Forms\Components\KeyValue::make('preferences_json')->label('Preferenze contatto')->helperText('Esempio: fascia_oraria => mattina.'),
@@ -246,7 +278,11 @@ class TherapyResource extends Resource
                         ->defaultItems(0)
                         ->columnSpanFull(),
                 ]),
-            ])->columnSpanFull(),
+            ])
+                ->nextAction(fn (Action $action): Action => $action->label('Avanti'))
+                ->previousAction(fn (Action $action): Action => $action->label('Indietro'))
+                ->submitAction(new \Illuminate\Support\HtmlString('<button type="submit" class="fi-btn fi-btn-size-md fi-btn-color-primary fi-color-custom fi-ac-action fi-ac-btn-action"><span class="fi-btn-label">Salva terapia</span></button>'))
+                ->columnSpanFull(),
         ]);
     }
 
@@ -433,17 +469,56 @@ class TherapyResource extends Resource
         ];
     }
 
-    private static function jsonRepeater(string $name, string $label): Forms\Components\Repeater
+    private static function clinicalQuestionsRepeater(string $name, string $label, array $defaultQuestions): Forms\Components\Repeater
     {
         return Forms\Components\Repeater::make($name)
             ->label($label)
-            ->helperText('Compila solo le informazioni realmente utili al monitoraggio clinico.')
+            ->helperText('Registra domande cliniche con risposte strutturate. Puoi aggiungere domande personalizzate.')
             ->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
             ->schema([
-                Forms\Components\TextInput::make('key')->required(),
-                Forms\Components\TextInput::make('value')->required(),
+                Forms\Components\TextInput::make('question_text')
+                    ->label('Domanda')
+                    ->required()
+                    ->validationMessages(['required' => 'Inserisci il testo della domanda clinica.'])
+                    ->maxLength(255),
+                Forms\Components\Select::make('answer_type')
+                    ->label('Tipo risposta')
+                    ->required()
+                    ->live()
+                    ->options([
+                        'text' => 'Testo',
+                        'boolean' => 'Sì / No',
+                        'single_choice' => 'Opzioni',
+                    ])
+                    ->validationMessages(['required' => 'Seleziona il tipo di risposta.']),
+                Forms\Components\TagsInput::make('options')
+                    ->label('Opzioni disponibili')
+                    ->placeholder('Inserisci le opzioni e premi invio')
+                    ->helperText('Compila solo se il tipo risposta è "Opzioni".')
+                    ->visible(fn (Forms\Get $get): bool => $get('answer_type') === 'single_choice')
+                    ->dehydrated(fn (Forms\Get $get): bool => $get('answer_type') === 'single_choice'),
+                Forms\Components\Textarea::make('answer_text')
+                    ->label('Risposta')
+                    ->rows(2)
+                    ->placeholder('Inserisci la risposta testuale')
+                    ->visible(fn (Forms\Get $get): bool => $get('answer_type') === 'text'),
+                Forms\Components\Radio::make('answer_boolean')
+                    ->label('Risposta')
+                    ->options([
+                        true => 'Sì',
+                        false => 'No',
+                    ])
+                    ->inline()
+                    ->visible(fn (Forms\Get $get): bool => $get('answer_type') === 'boolean'),
+                Forms\Components\Select::make('answer_choice')
+                    ->label('Risposta')
+                    ->options(fn (Forms\Get $get): array => collect($get('options') ?? [])->filter()->mapWithKeys(fn (mixed $option): array => [(string) $option => (string) $option])->all())
+                    ->visible(fn (Forms\Get $get): bool => $get('answer_type') === 'single_choice'),
             ])
-            ->defaultItems(0)
+            ->default($defaultQuestions)
+            ->addActionLabel('Aggiungi domanda')
+            ->reorderable(false)
+            ->collapsed()
             ->columnSpanFull();
     }
 

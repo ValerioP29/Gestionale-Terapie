@@ -267,6 +267,112 @@ class TherapyServicesTest extends TestCase
         $this->assertSame('ipertensione', $updatedCareRow->primary_condition);
     }
 
+
+    public function test_create_therapy_persists_structured_step_three_sections(): void
+    {
+        Pharmacy::withoutGlobalScopes()->create(['id' => 1, 'business_name' => 'A']);
+        $patient = Patient::withoutGlobalScopes()->create(['pharmacy_id' => 1, 'first_name' => 'Mario']);
+
+        $service = new CreateTherapyService(new TherapyPayloadNormalizer());
+
+        $therapy = $service->handle([
+            'patient_id' => $patient->id,
+            'therapy_title' => 'Terapia cronica strutturata',
+            'primary_condition' => 'diabete',
+            'chronic_care' => [
+                'care_context' => [
+                    [
+                        'question_text' => 'Paziente già seguito in terapia per questa condizione?',
+                        'answer_type' => 'boolean',
+                        'answer_boolean' => true,
+                        'options' => null,
+                    ],
+                    [
+                        'question_text' => 'Criticità iniziali riferite dal paziente',
+                        'answer_type' => 'text',
+                        'answer_text' => 'Difficoltà a rispettare gli orari',
+                        'options' => null,
+                    ],
+                ],
+                'doctor_info' => [
+                    'medico_curante' => [
+                        'nome' => 'Laura',
+                        'cognome' => 'Bianchi',
+                        'email' => 'laura.bianchi@example.test',
+                        'telefono' => '3331234567',
+                    ],
+                    'specialista' => [
+                        'nome' => 'Paolo',
+                        'cognome' => 'Rossi',
+                    ],
+                ],
+                'flags' => [
+                    [
+                        'question_text' => 'Priorità di intervento',
+                        'answer_type' => 'single_choice',
+                        'options' => ['Bassa', 'Media', 'Alta'],
+                        'answer_choice' => 'Media',
+                    ],
+                ],
+            ],
+            'consent' => [
+                'signer_name' => 'Mario Rossi',
+                'signer_relation' => 'patient',
+                'consent_text' => 'Consenso informato',
+                'signed_at' => '2026-02-16 09:00:00',
+                'scopes_json' => ['clinical_data', 'marketing', 'profiling'],
+            ],
+        ]);
+
+        $careRow = $therapy->fresh()->chronicCare()->firstOrFail();
+
+        $this->assertSame('diabete', $careRow->primary_condition);
+        $this->assertSame('boolean', $careRow->care_context[0]['answer_type']);
+        $this->assertTrue($careRow->care_context[0]['answer_boolean']);
+        $this->assertSame('Laura', $careRow->doctor_info['medico_curante']['nome']);
+        $this->assertSame('Media', $careRow->flags[0]['answer_choice']);
+    }
+
+    public function test_update_therapy_preserves_structured_doctor_blocks_without_key_value_shape(): void
+    {
+        Pharmacy::withoutGlobalScopes()->create(['id' => 1, 'business_name' => 'A']);
+        $patient = Patient::withoutGlobalScopes()->create(['pharmacy_id' => 1, 'first_name' => 'Mario']);
+
+        $therapy = Therapy::withoutGlobalScopes()->create([
+            'pharmacy_id' => 1,
+            'patient_id' => $patient->id,
+            'therapy_title' => 'Terapia cronica',
+            'status' => 'active',
+        ]);
+
+        $service = new UpdateTherapyService(new TherapyPayloadNormalizer());
+
+        $service->handle($therapy->id, [
+            'primary_condition' => 'ipertensione',
+            'chronic_care' => [
+                'doctor_info' => [
+                    'medico_curante' => [
+                        'nome' => 'Giulia',
+                        'cognome' => 'Neri',
+                        'email' => 'giulia.neri@example.test',
+                        'telefono' => '3400000000',
+                    ],
+                    'specialista' => [
+                        'nome' => 'Marco',
+                        'cognome' => 'Verdi',
+                        'telefono' => '3491111111',
+                    ],
+                ],
+            ],
+        ]);
+
+        $careRow = $therapy->fresh()->chronicCare()->firstOrFail();
+
+        $this->assertArrayHasKey('medico_curante', $careRow->doctor_info);
+        $this->assertSame('Giulia', $careRow->doctor_info['medico_curante']['nome']);
+        $this->assertArrayNotHasKey('key', $careRow->doctor_info['medico_curante']);
+    }
+
     public function test_cross_tenant_update_fails_with_model_not_found(): void
     {
         Pharmacy::withoutGlobalScopes()->create(['id' => 1, 'business_name' => 'A']);
