@@ -10,10 +10,15 @@ class ViewTherapy extends ViewRecord
 {
     protected static string $resource = TherapyResource::class;
 
+    public function getTitle(): string
+    {
+        return 'Dettaglio terapia';
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Actions\EditAction::make(),
+            Actions\EditAction::make()->label('Modifica'),
         ];
     }
 }

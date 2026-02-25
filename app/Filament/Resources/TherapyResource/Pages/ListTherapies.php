@@ -10,10 +10,15 @@ class ListTherapies extends ListRecords
 {
     protected static string $resource = TherapyResource::class;
 
+    public function getTitle(): string
+    {
+        return 'Terapie';
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()->label('Nuova terapia')->modalHeading('Crea nuova terapia'),
         ];
     }
 }

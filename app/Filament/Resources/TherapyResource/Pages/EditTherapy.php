@@ -5,11 +5,22 @@ namespace App\Filament\Resources\TherapyResource\Pages;
 use App\Filament\Resources\TherapyResource;
 use App\Models\Therapy;
 use App\Services\Therapies\UpdateTherapyService;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\EditRecord;
 
 class EditTherapy extends EditRecord
 {
     protected static string $resource = TherapyResource::class;
+
+    public function getTitle(): string
+    {
+        return 'Modifica terapia';
+    }
+
+    protected function getSaveFormAction(): Action
+    {
+        return parent::getSaveFormAction()->label('Salva modifiche');
+    }
 
     protected function mutateFormDataBeforeFill(array $data): array
     {

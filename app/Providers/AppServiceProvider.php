@@ -15,6 +15,9 @@ use App\Policies\ReminderPolicy;
 use App\Policies\ReportPolicy;
 use App\Policies\TherapyPolicy;
 use App\Tenancy\CurrentPharmacy;
+use Carbon\Carbon;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 
@@ -33,6 +36,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $locale = config('app.locale', 'it');
+
+        app()->setLocale($locale);
+        Carbon::setLocale($locale);
+        CarbonImmutable::setLocale($locale);
+        Date::setLocale($locale);
+        setlocale(LC_TIME, 'it_IT.UTF-8', 'it_IT', 'it');
+
         Gate::policy(Therapy::class, TherapyPolicy::class);
         Gate::policy(Patient::class, PatientPolicy::class);
         Gate::policy(Reminder::class, ReminderPolicy::class);
