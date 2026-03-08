@@ -69,6 +69,7 @@ class TherapyServicesTest extends TestCase
             $table->increments('id');
             $table->unsignedInteger('therapy_id');
             $table->string('primary_condition', 50);
+            $table->string('custom_condition_name', 120)->nullable();
             $table->json('care_context')->nullable();
             $table->json('doctor_info')->nullable();
             $table->json('general_anamnesis')->nullable();

@@ -118,6 +118,10 @@ class UpdateTherapyService
             if ($primaryCondition === '') {
                 $errors['primary_condition'] = 'La condizione clinica principale è obbligatoria.';
             }
+
+            if ($primaryCondition === 'altro') {
+                $errors['custom_condition_name'] = 'Inserisci il nome della patologia custom.';
+            }
         }
 
         if (array_key_exists('consent', $normalized)) {
@@ -186,7 +190,7 @@ class UpdateTherapyService
             }
         }
 
-        foreach (['primary_condition', 'risk_score', 'notes_initial', 'follow_up_date'] as $field) {
+        foreach (['primary_condition', 'custom_condition_name', 'risk_score', 'notes_initial', 'follow_up_date'] as $field) {
             if (array_key_exists($field, $normalized)) {
                 $updates[$field] = $normalized[$field];
             }

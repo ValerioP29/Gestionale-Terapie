@@ -15,6 +15,14 @@ class ConditionKeyNormalizerTest extends TestCase
         $this->assertSame('dislipidemia', ConditionKeyNormalizer::normalize('ipercolesterolemia'));
     }
 
+
+
+    public function test_it_builds_custom_keys_from_free_text(): void
+    {
+        $this->assertSame('custom:carcinoma-mammario', ConditionKeyNormalizer::customKeyFromName('Carcinoma mammario'));
+        $this->assertTrue(ConditionKeyNormalizer::isCustom('custom:carcinoma-mammario'));
+    }
+
     public function test_it_falls_back_to_altro_for_unknown_values(): void
     {
         $this->assertSame('altro', ConditionKeyNormalizer::normalize('')); 

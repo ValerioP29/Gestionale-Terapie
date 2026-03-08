@@ -15,6 +15,7 @@ class TherapyChronicCare extends Model
     protected $fillable = [
         'therapy_id',
         'primary_condition',
+        'custom_condition_name',
         'care_context',
         'doctor_info',
         'general_anamnesis',

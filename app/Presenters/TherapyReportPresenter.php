@@ -3,6 +3,7 @@
 namespace App\Presenters;
 
 use App\Models\TherapyReport;
+use App\Support\ConditionKeyNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
@@ -99,11 +100,12 @@ class TherapyReportPresenter
         $survey = $this->latestSurvey();
 
         return [
-            ['label' => 'Condizione principale', 'value' => (string) ($clinical['primary_condition'] ?? 'N/D')],
+            ['label' => 'Condizione principale', 'value' => $this->conditionLabel($clinical['primary_condition'] ?? null, $clinical['custom_condition_name'] ?? null)],
             ['label' => 'Indice di rischio iniziale', 'value' => $this->formatRisk($clinical['risk_score'] ?? null)],
             ['label' => 'Prossimo follow-up suggerito', 'value' => $this->formatDate($clinical['follow_up_date'] ?? null)],
-            ['label' => 'Questionario aderenza', 'value' => (string) ($survey['condition_type'] ?? 'N/D')],
+            ['label' => 'Questionario aderenza', 'value' => $this->conditionLabel($survey['condition_type'] ?? null, $clinical['custom_condition_name'] ?? null)],
             ['label' => 'Livello questionario', 'value' => (string) ($survey['level'] ?? 'N/D')],
+            ['label' => 'Risposte questionario iniziale', 'value' => $this->surveyAnswersSummary($survey['answers'] ?? [])],
             ['label' => 'Note cliniche', 'value' => (string) ($clinical['notes_initial'] ?? 'Nessuna nota clinica')],
         ];
     }
@@ -316,6 +318,44 @@ class TherapyReportPresenter
             'canceled' => 'Annullato (legacy)',
             default => 'N/D',
         };
+    }
+
+
+    private function conditionLabel(mixed $conditionKey, mixed $customConditionName = null): string
+    {
+        $key = trim((string) $conditionKey);
+
+        if ($key === '') {
+            return 'N/D';
+        }
+
+        if (ConditionKeyNormalizer::isCustom($key)) {
+            $custom = trim((string) $customConditionName);
+
+            return $custom !== '' ? $custom : 'Patologia custom';
+        }
+
+        return ConditionKeyNormalizer::options()[$key] ?? $key;
+    }
+
+    private function surveyAnswersSummary(mixed $answers): string
+    {
+        if (! is_array($answers) || $answers === []) {
+            return 'N/D';
+        }
+
+        $rows = collect($answers)
+            ->filter(fn (mixed $row): bool => is_array($row))
+            ->map(function (array $row): string {
+                $question = trim((string) ($row['question_label'] ?? $row['question_key'] ?? 'Domanda'));
+                $answer = trim((string) ($row['answer'] ?? '-'));
+
+                return sprintf('%s: %s', $question !== '' ? $question : 'Domanda', $answer !== '' ? $answer : '-');
+            })
+            ->filter()
+            ->values();
+
+        return $rows->isEmpty() ? 'N/D' : $rows->implode("\n");
     }
 
     private function mapConsentScope(string $scope): string

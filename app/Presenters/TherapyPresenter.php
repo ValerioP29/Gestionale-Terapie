@@ -41,7 +41,7 @@ class TherapyPresenter
         foreach ($answers as $item) {
             if (is_array($item) && array_key_exists('question_key', $item)) {
                 $questionKey = (string) $item['question_key'];
-                $questionLabel = $labelsByKey[$questionKey] ?? $questionKey;
+                $questionLabel = trim((string) ($item['question_label'] ?? '')) ?: ($labelsByKey[$questionKey] ?? $questionKey);
                 $answerValue = trim((string) ($item['answer'] ?? '-'));
 
                 $rows[] = sprintf('%s: %s', $questionLabel, $answerValue !== '' ? $answerValue : '-');

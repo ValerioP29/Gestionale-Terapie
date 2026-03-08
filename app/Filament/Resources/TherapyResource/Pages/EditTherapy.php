@@ -27,8 +27,10 @@ class EditTherapy extends EditRecord
         /** @var Therapy $record */
         $record = $this->record->load(['currentChronicCare', 'latestSurvey', 'latestConsent', 'assistants']);
 
-        $data['primary_condition'] = $record->currentChronicCare?->primary_condition;
+        $storedCondition = (string) ($record->currentChronicCare?->primary_condition ?? '');
+        $data['primary_condition'] = \App\Support\ConditionKeyNormalizer::isCustom($storedCondition) ? 'altro' : $storedCondition;
         $data['risk_score'] = $record->currentChronicCare?->risk_score;
+        $data['custom_condition_name'] = $record->currentChronicCare?->custom_condition_name;
         $data['follow_up_date'] = $record->currentChronicCare?->follow_up_date;
         $data['notes_initial'] = $record->currentChronicCare?->notes_initial;
         $data['chronic_care'] = $record->currentChronicCare?->only([
