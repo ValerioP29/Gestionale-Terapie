@@ -27,7 +27,8 @@ class TherapyUpdateRequest extends FormRequest
             'start_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'end_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
 
-            'primary_condition' => ['sometimes', 'required', 'string', Rule::in(array_keys(ConditionKeyNormalizer::options()))],
+            'primary_condition' => ['sometimes', 'required', 'string'],
+            'custom_condition_name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'chronic_care' => ['sometimes', 'array'],
             'chronic_care.general_anamnesis' => ['nullable', 'array'],
             'chronic_care.detailed_intake' => ['nullable', 'array'],
@@ -46,7 +47,7 @@ class TherapyUpdateRequest extends FormRequest
             'consent.scopes_json.*' => ['string', Rule::in(['privacy', 'marketing', 'profiling', 'clinical_data'])],
 
             'survey' => ['sometimes', 'array'],
-            'survey.condition_type' => ['required_with:survey', 'string', Rule::in(array_keys(ConditionKeyNormalizer::options()))],
+            'survey.condition_type' => ['nullable', 'string'],
             'survey.level' => ['required_with:survey', Rule::in(['base', 'approfondito'])],
             'survey.answers' => ['nullable', 'array'],
 

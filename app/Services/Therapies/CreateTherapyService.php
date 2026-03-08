@@ -100,6 +100,7 @@ class CreateTherapyService
 
         $attributes = [
             'primary_condition' => $normalized['primary_condition'] ?? 'altro',
+            'custom_condition_name' => $normalized['custom_condition_name'] ?? null,
             'risk_score' => $normalized['risk_score'] ?? null,
             'notes_initial' => $normalized['notes_initial'] ?? null,
             'follow_up_date' => $normalized['follow_up_date'] ?? null,
@@ -127,6 +128,10 @@ class CreateTherapyService
 
         if ($primaryCondition === '') {
             $errors['primary_condition'] = 'La condizione clinica principale è obbligatoria.';
+        }
+
+        if ($primaryCondition === 'altro') {
+            $errors['custom_condition_name'] = 'Inserisci il nome della patologia custom.';
         }
 
         $consent = $normalized['consent'] ?? null;

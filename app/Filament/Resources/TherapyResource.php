@@ -11,7 +11,6 @@ use App\Filament\Resources\TherapyResource\RelationManagers\TimelineRelationMana
 use App\Models\Assistant;
 use App\Models\Patient;
 use App\Models\Therapy;
-use App\Models\TherapyChecklistQuestion;
 use App\Models\TherapyChronicCare;
 use App\Presenters\TherapyPresenter;
 use App\Services\Patients\CreatePatientService;
@@ -168,47 +167,49 @@ class TherapyResource extends Resource
                     self::clinicalQuestionsRepeater('chronic_care.flags', 'Segnalazioni cliniche', config('therapy_clinical_questions.flags', [])),
                 ])->columns(2),
                 Forms\Components\Wizard\Step::make('Questionario di aderenza')->description("Definisci la patologia principale e compila il questionario iniziale per monitorare l'aderenza.")->schema([
-                    Forms\Components\Select::make('primary_condition')->label('Patologia/condizione principale')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options(ConditionKeyNormalizer::options())->helperText('Seleziona una condizione standardizzata per allineare checklist e report.')->validationMessages(['required' => 'La condizione clinica principale è obbligatoria.'])->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->dehydrateStateUsing(fn (mixed $state, Forms\Get $get): string => $get('ui_care_mode') === 'fidelity' ? 'altro' : ConditionKeyNormalizer::normalize((string) $state)),
-                    Forms\Components\Select::make('survey.condition_type')->label('Condizione di riferimento')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options(ConditionKeyNormalizer::options())->default(fn (Forms\Get $get): ?string => $get('primary_condition'))->live()->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->helperText('Usa la stessa condizione clinica della presa in carico.'),
+                    Forms\Components\Select::make('primary_condition')->label('Patologia/condizione principale')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options(ConditionKeyNormalizer::options())->helperText('Seleziona una condizione standardizzata per allineare checklist e report.')->validationMessages(['required' => 'La condizione clinica principale è obbligatoria.'])->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->live()->afterStateUpdated(function (Forms\Set $set, Forms\Get $get): void {
+                            self::syncSurveyAnswersWithTemplates($set, $get);
+                        })->dehydrateStateUsing(fn (mixed $state, Forms\Get $get): string => self::effectiveConditionKey($state, $get('custom_condition_name'))),
+                    Forms\Components\TextInput::make('custom_condition_name')
+                        ->label('Nome patologia custom')
+                        ->placeholder('Es. carcinoma mammario')
+                        ->maxLength(120)
+                        ->live()
+                        ->afterStateUpdated(function (Forms\Set $set, Forms\Get $get): void {
+                            self::syncSurveyAnswersWithTemplates($set, $get);
+                        })
+                        ->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity' && $get('primary_condition') === 'altro')
+                        ->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity' && $get('primary_condition') === 'altro')
+                        ->validationMessages(['required' => 'Inserisci il nome della patologia custom.']),
                     Forms\Components\Select::make('survey.level')->label('Livello questionario')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options([
                         'base' => 'Base',
                         'approfondito' => 'Approfondito',
-                    ])->validationMessages(['required' => 'Seleziona il livello del questionario.']),
+                    ])->live()->afterStateUpdated(function (Forms\Set $set, Forms\Get $get): void {
+                        self::syncSurveyAnswersWithTemplates($set, $get);
+                    })->validationMessages(['required' => 'Seleziona il livello del questionario.']),
+                    Forms\Components\Hidden::make('survey._mode_state')->dehydrated(false),
+                    Forms\Components\Hidden::make('survey._condition_state')->dehydrated(false),
                     Forms\Components\Repeater::make('survey.answers')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
                         ->schema([
                             Forms\Components\Select::make('question_key')
                                 ->label('Domanda checklist')
-                                ->helperText('Seleziona la domanda da monitorare nel questionario di aderenza.')
-                                ->required()
+                                ->helperText('Le domande base standard vengono precaricate automaticamente.')
+                                ->required(fn (Forms\Get $get): bool => self::usesTemplateSurveyQuestions($get))
                                 ->searchable()
-                                ->options(function (Forms\Get $get): array {
-                                    $tenantId = app(CurrentPharmacy::class)->getId();
-
-                                    if ($tenantId === null) {
-                                        return [];
-                                    }
-
-                                    $condition = trim((string) ($get('../../survey.condition_type') ?? ''));
-
-                                    if ($condition === '') {
-                                        return [];
-                                    }
-
-                                    return TherapyChecklistQuestion::query()
-                                        ->where('pharmacy_id', $tenantId)
-                                        ->where('condition_key', $condition)
-                                        ->where('is_active', true)
-                                        ->orderBy('sort_order')
-                                        ->limit(100)
-                                        ->get()
-                                        ->mapWithKeys(fn (TherapyChecklistQuestion $question): array => [
-                                            $question->question_key ?? (string) $question->id => $question->label,
-                                        ])
-                                        ->all();
-                                }),
+                                ->visible(fn (Forms\Get $get): bool => self::usesTemplateSurveyQuestions($get))
+                                ->options(fn (Forms\Get $get): array => self::surveyQuestionOptions($get)),
+                            Forms\Components\TextInput::make('question_label')
+                                ->label('Domanda custom')
+                                ->placeholder('Inserisci una domanda personalizzata')
+                                ->required(fn (Forms\Get $get): bool => ! self::usesTemplateSurveyQuestions($get))
+                                ->visible(fn (Forms\Get $get): bool => ! self::usesTemplateSurveyQuestions($get)),
                             Forms\Components\TextInput::make('answer')->label('Risposta')->required()->helperText('Inserisci una risposta comprensibile per il report.'),
                         ])
                         ->defaultItems(0)
+                        ->afterStateHydrated(function (Forms\Set $set, Forms\Get $get): void {
+                            self::syncSurveyAnswersWithTemplates($set, $get);
+                        })
+                        ->addActionLabel('Aggiungi domanda')
                         ->columnSpanFull(),
                 ])->columns(2),
                 Forms\Components\Wizard\Step::make('Consenso informato')->schema([
@@ -312,13 +313,13 @@ class TherapyResource extends Resource
                     ->color(fn (Therapy $record): string => self::isTherapyComplete($record) ? 'success' : 'danger'),
             ])->columns(2),
             InfolistSection::make('Presa in carico clinica')->schema([
-                TextEntry::make('currentChronicCare.primary_condition')->label('Condizione principale')->formatStateUsing(fn (?string $state): string => ConditionKeyNormalizer::options()[$state ?? ''] ?? ($state ?? 'N/D')),
+                TextEntry::make('currentChronicCare.primary_condition')->label('Condizione principale')->state(fn (Therapy $record): string => self::conditionLabel($record->currentChronicCare?->primary_condition, $record->currentChronicCare?->custom_condition_name)),
                 TextEntry::make('currentChronicCare.risk_score'),
                 TextEntry::make('currentChronicCare.follow_up_date')->date(),
                 TextEntry::make('currentChronicCare.notes_initial')->columnSpanFull(),
             ])->columns(2),
             InfolistSection::make('Questionario di aderenza')->schema([
-                TextEntry::make('latestSurvey.condition_type'),
+                TextEntry::make('latestSurvey.condition_type')->label('Condizione questionario')->state(fn (Therapy $record): string => self::conditionLabel($record->latestSurvey?->condition_type, $record->currentChronicCare?->custom_condition_name)),
                 TextEntry::make('latestSurvey.level')->badge(),
                 TextEntry::make('survey_readable')
                     ->label('Risposte questionario')
@@ -355,7 +356,7 @@ class TherapyResource extends Resource
                     ->searchable(query: fn (Builder $query, string $search): Builder => $query->whereHas('patient', fn (Builder $patientQuery) => $patientQuery
                         ->where('first_name', 'ilike', "%{$search}%")
                         ->orWhere('last_name', 'ilike', "%{$search}%"))),
-                Tables\Columns\TextColumn::make('primary_condition')->label('Condizione')->state(fn (Therapy $record): string => ConditionKeyNormalizer::options()[$record->currentChronicCare?->primary_condition ?? ''] ?? ($record->currentChronicCare?->primary_condition ?? '-')),
+                Tables\Columns\TextColumn::make('primary_condition')->label('Condizione')->state(fn (Therapy $record): string => self::conditionLabel($record->currentChronicCare?->primary_condition, $record->currentChronicCare?->custom_condition_name)),
                 Tables\Columns\TextColumn::make('status')->badge()->sortable(),
                 Tables\Columns\TextColumn::make('start_date')->date()->sortable(),
                 Tables\Columns\TextColumn::make('next_due')->label('Prossima scadenza')->state(fn (Therapy $record): string => optional($record->reminders->sortBy('next_due_at')->first()?->next_due_at)?->format('Y-m-d H:i') ?? '-'),
@@ -481,6 +482,8 @@ class TherapyResource extends Resource
                     ->required()
                     ->validationMessages(['required' => 'Inserisci il testo della domanda clinica.'])
                     ->maxLength(255),
+                Forms\Components\Hidden::make('question_key'),
+                Forms\Components\Toggle::make('is_readonly')->default(false)->hidden(),
                 Forms\Components\Select::make('answer_type')
                     ->label('Tipo risposta')
                     ->required()
@@ -489,6 +492,7 @@ class TherapyResource extends Resource
                         'text' => 'Testo',
                         'boolean' => 'Sì / No',
                         'single_choice' => 'Opzioni',
+                        'number' => 'Numero',
                     ])
                     ->validationMessages(['required' => 'Seleziona il tipo di risposta.']),
                 Forms\Components\TagsInput::make('options')
@@ -502,6 +506,11 @@ class TherapyResource extends Resource
                     ->rows(2)
                     ->placeholder('Inserisci la risposta testuale')
                     ->visible(fn (Forms\Get $get): bool => $get('answer_type') === 'text'),
+                Forms\Components\TextInput::make('answer_number')
+                    ->label('Risposta numerica')
+                    ->numeric()
+                    ->readOnly(fn (Forms\Get $get): bool => (bool) $get('is_readonly'))
+                    ->visible(fn (Forms\Get $get): bool => $get('answer_type') === 'number'),
                 Forms\Components\Radio::make('answer_boolean')
                     ->label('Risposta')
                     ->options([
@@ -516,10 +525,282 @@ class TherapyResource extends Resource
                     ->visible(fn (Forms\Get $get): bool => $get('answer_type') === 'single_choice'),
             ])
             ->default($defaultQuestions)
+            ->afterStateHydrated(function (Forms\Get $get, Forms\Set $set) use ($name): void {
+                self::applyBiometricDerivedValues($set, $get($name), $name);
+            })
+            ->afterStateUpdated(function (Forms\Set $set, ?array $state) use ($name): void {
+                self::applyBiometricDerivedValues($set, $state, $name);
+            })
             ->addActionLabel('Aggiungi domanda')
             ->reorderable(false)
             ->collapsed()
             ->columnSpanFull();
+    }
+
+
+    private static function applyBiometricDerivedValues(Forms\Set $set, mixed $state, string $path): void
+    {
+        if (! is_array($state)) {
+            return;
+        }
+
+        $weight = self::extractBiometricNumericValue($state, 'weight_kg');
+        $height = self::extractBiometricNumericValue($state, 'height_cm');
+
+        if ($weight === null || $height === null || $height <= 0.0) {
+            self::clearBiometricDerivedValue($set, $state, $path);
+
+            return;
+        }
+
+        $heightMeters = $height > 3 ? ($height / 100) : $height;
+
+        if ($heightMeters <= 0.0) {
+            self::clearBiometricDerivedValue($set, $state, $path);
+
+            return;
+        }
+
+        $bmi = round($weight / ($heightMeters * $heightMeters), 2);
+
+        foreach ($state as $index => $row) {
+            if (! is_array($row) || ($row['question_key'] ?? null) !== 'bmi') {
+                continue;
+            }
+
+            $set(sprintf('%s.%s.answer_number', $path, $index), $bmi);
+            break;
+        }
+    }
+
+
+    private static function clearBiometricDerivedValue(Forms\Set $set, array $state, string $path): void
+    {
+        foreach ($state as $index => $row) {
+            if (! is_array($row) || ($row['question_key'] ?? null) !== 'bmi') {
+                continue;
+            }
+
+            $set(sprintf('%s.%s.answer_number', $path, $index), null);
+            break;
+        }
+    }
+
+    private static function extractBiometricNumericValue(array $rows, string $questionKey): ?float
+    {
+        foreach ($rows as $row) {
+            if (! is_array($row) || ($row['question_key'] ?? null) !== $questionKey) {
+                continue;
+            }
+
+            $value = $row['answer_number'] ?? null;
+
+            if (! is_numeric($value)) {
+                return null;
+            }
+
+            return (float) $value;
+        }
+
+        return null;
+    }
+
+    private static function usesTemplateSurveyQuestions(Forms\Get $get): bool
+    {
+        $primaryCondition = self::surveyContextValue($get, 'primary_condition');
+        $surveyLevel = self::surveyContextValue($get, 'survey.level');
+
+        return $primaryCondition !== 'altro'
+            && $surveyLevel === 'base';
+    }
+
+    private static function syncSurveyAnswersWithTemplates(Forms\Set $set, Forms\Get $get): void
+    {
+        $primaryCondition = self::surveyContextValue($get, 'primary_condition');
+        $customConditionName = self::surveyContextValue($get, 'custom_condition_name');
+        $conditionKey = self::effectiveConditionKey($primaryCondition, $customConditionName);
+        $mode = self::usesTemplateSurveyQuestions($get) ? 'template' : 'custom';
+
+        $previousMode = self::surveyContextValue($get, 'survey._mode_state');
+        $previousCondition = self::surveyContextValue($get, 'survey._condition_state');
+        $answers = (array) $get('survey.answers');
+
+        if ($mode === 'template') {
+            $templates = self::surveyTemplateRowsByCondition($conditionKey);
+
+            if ($templates === []) {
+                $answers = [];
+            } else {
+                $existingByKey = collect($answers)
+                    ->filter(fn (mixed $row): bool => is_array($row) && trim((string) ($row['question_key'] ?? '')) !== '')
+                    ->keyBy(fn (array $row): string => (string) $row['question_key']);
+
+                $answers = array_map(function (array $template) use ($existingByKey): array {
+                    $existing = $existingByKey->get((string) $template['question_key']);
+
+                    return [
+                        'question_key' => (string) $template['question_key'],
+                        'answer' => is_array($existing) ? (string) ($existing['answer'] ?? '') : '',
+                    ];
+                }, $templates);
+            }
+        } else {
+            if ($previousMode === 'template' && $previousCondition === $conditionKey) {
+                $answers = self::convertTemplateRowsToCustomRows($answers, self::templateLabelsByKey($conditionKey));
+            } elseif ($previousMode === 'template' && $previousCondition !== $conditionKey) {
+                $answers = [];
+            } elseif ($previousMode === 'custom' && $previousCondition !== '' && $previousCondition !== $conditionKey) {
+                $answers = [];
+            } else {
+                $answers = self::normalizeCustomRows($answers);
+            }
+
+            $isCustomPrimary = $primaryCondition === 'altro';
+
+            if ($isCustomPrimary && $conditionKey !== 'altro' && $answers === []) {
+                $answers = self::customRowsFromTemplates(self::surveyTemplateRowsByCondition($conditionKey));
+            }
+        }
+
+        $set('survey.answers', $answers);
+        $set('survey._mode_state', $mode);
+        $set('survey._condition_state', $conditionKey);
+    }
+
+    private static function surveyQuestionOptions(Forms\Get $get): array
+    {
+        return collect(self::surveyTemplateRows(self::surveyContextValue($get, 'primary_condition'), self::surveyContextValue($get, 'custom_condition_name')))
+            ->mapWithKeys(fn (array $question): array => [(string) $question['question_key'] => (string) $question['label']])
+            ->all();
+    }
+
+    /**
+     * @param array<int, mixed> $rows
+     * @param array<string, string> $labelsByKey
+     * @return array<int, array<string, string>>
+     */
+    private static function convertTemplateRowsToCustomRows(array $rows, array $labelsByKey): array
+    {
+        return collect($rows)
+            ->filter(fn (mixed $row): bool => is_array($row) && trim((string) ($row['question_key'] ?? '')) !== '')
+            ->map(function (array $row) use ($labelsByKey): array {
+                $questionKey = trim((string) ($row['question_key'] ?? ''));
+
+                return [
+                    'question_key' => $questionKey,
+                    'question_label' => $labelsByKey[$questionKey] ?? $questionKey,
+                    'answer' => trim((string) ($row['answer'] ?? '')),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, mixed> $rows
+     * @return array<int, array<string, string>>
+     */
+    private static function normalizeCustomRows(array $rows): array
+    {
+        return collect($rows)
+            ->filter(fn (mixed $row): bool => is_array($row))
+            ->map(function (array $row): ?array {
+                $questionLabel = trim((string) ($row['question_label'] ?? ''));
+                $questionKey = trim((string) ($row['question_key'] ?? ''));
+
+                if ($questionLabel === '' && $questionKey === '') {
+                    return null;
+                }
+
+                return [
+                    'question_key' => $questionKey,
+                    'question_label' => $questionLabel !== '' ? $questionLabel : $questionKey,
+                    'answer' => trim((string) ($row['answer'] ?? '')),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $templates
+     * @return array<int, array<string, string>>
+     */
+    private static function customRowsFromTemplates(array $templates): array
+    {
+        return array_map(fn (array $template): array => [
+            'question_key' => (string) ($template['question_key'] ?? ''),
+            'question_label' => (string) ($template['label'] ?? ''),
+            'answer' => '',
+        ], $templates);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function templateLabelsByKey(string $conditionKey): array
+    {
+        return collect(self::surveyTemplateRowsByCondition($conditionKey))
+            ->mapWithKeys(fn (array $question): array => [(string) $question['question_key'] => (string) $question['label']])
+            ->all();
+    }
+
+    private static function surveyContextValue(Forms\Get $get, string $path): string
+    {
+        foreach ([$path, '../'.$path, '../../'.$path] as $candidate) {
+            $value = $get($candidate);
+
+            if ($value !== null && trim((string) $value) !== '') {
+                return trim((string) $value);
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function surveyTemplateRows(mixed $primaryCondition, mixed $customConditionName): array
+    {
+        $conditionKey = self::effectiveConditionKey($primaryCondition, $customConditionName);
+
+        return self::surveyTemplateRowsByCondition($conditionKey);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function surveyTemplateRowsByCondition(string $conditionKey): array
+    {
+        $tenantId = app(CurrentPharmacy::class)->getId();
+
+        if ($tenantId === null || trim($conditionKey) === '') {
+            return [];
+        }
+
+        return app(\App\Services\Checklist\EnsureTherapyChecklistService::class)
+            ->resolveTemplates($tenantId, $conditionKey);
+    }
+
+    private static function effectiveConditionKey(mixed $primaryCondition, mixed $customConditionName): string
+    {
+        if ((string) $primaryCondition === 'altro') {
+            return ConditionKeyNormalizer::customKeyFromName((string) $customConditionName);
+        }
+
+        return ConditionKeyNormalizer::normalize((string) $primaryCondition);
+    }
+
+
+    private static function conditionLabel(?string $conditionKey, ?string $customLabel = null): string
+    {
+        if (ConditionKeyNormalizer::isCustom($conditionKey)) {
+            return trim((string) $customLabel) !== '' ? (string) $customLabel : 'Patologia custom';
+        }
+
+        return ConditionKeyNormalizer::options()[$conditionKey ?? ''] ?? ($conditionKey ?? 'N/D');
     }
 
     private static function completenessBadgeFromForm(Forms\Get $get): string
@@ -539,6 +820,7 @@ class TherapyResource extends Resource
     {
         $patientId = $get('patient_id');
         $primaryCondition = trim((string) ($get('primary_condition') ?? ''));
+        $customConditionName = trim((string) ($get('custom_condition_name') ?? ''));
         $signerName = trim((string) ($get('consent.signer_name') ?? ''));
         $signedAt = $get('consent.signed_at');
         $consentFlags = [
@@ -549,7 +831,7 @@ class TherapyResource extends Resource
 
         return is_numeric($patientId)
             && $primaryCondition !== ''
-            && $primaryCondition !== 'altro'
+            && ($primaryCondition !== 'altro' || $customConditionName !== '')
             && $signerName !== ''
             && $signedAt !== null
             && ! in_array(false, $consentFlags, true);
@@ -560,12 +842,13 @@ class TherapyResource extends Resource
         $record->loadMissing(['patient', 'currentChronicCare', 'latestConsent']);
 
         $primaryCondition = trim((string) ($record->currentChronicCare?->primary_condition ?? ''));
+        $customConditionName = trim((string) ($record->currentChronicCare?->custom_condition_name ?? ''));
         $consent = $record->latestConsent;
         $scopes = collect((array) ($consent?->scopes_json ?? []));
 
         return $record->patient_id !== null
             && $primaryCondition !== ''
-            && $primaryCondition !== 'altro'
+            && ($primaryCondition !== 'altro' || $customConditionName !== '')
             && $consent !== null
             && trim((string) $consent->signer_name) !== ''
             && $consent->signed_at !== null

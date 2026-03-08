@@ -27,7 +27,8 @@ class TherapyStoreRequest extends FormRequest
             'start_date' => ['nullable', 'date_format:Y-m-d'],
             'end_date' => ['nullable', 'date_format:Y-m-d'],
 
-            'primary_condition' => ['required', 'string', Rule::in(array_keys(ConditionKeyNormalizer::options()))],
+            'primary_condition' => ['required', 'string'],
+            'custom_condition_name' => ['nullable', 'string', 'max:120'],
             'chronic_care' => ['nullable', 'array'],
             'chronic_care.general_anamnesis' => ['nullable', 'array'],
             'chronic_care.detailed_intake' => ['nullable', 'array'],
@@ -46,7 +47,7 @@ class TherapyStoreRequest extends FormRequest
             'consent.scopes_json.*' => ['string', Rule::in(['privacy', 'marketing', 'profiling', 'clinical_data'])],
 
             'survey' => ['nullable', 'array'],
-            'survey.condition_type' => ['required_with:survey', 'string', Rule::in(array_keys(ConditionKeyNormalizer::options()))],
+            'survey.condition_type' => ['nullable', 'string'],
             'survey.level' => ['required_with:survey', Rule::in(['base', 'approfondito'])],
             'survey.answers' => ['nullable', 'array'],
 

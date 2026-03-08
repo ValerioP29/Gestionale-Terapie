@@ -21,6 +21,7 @@ class TherapyChecklistSpecTest extends TestCase
         parent::setUp();
 
         Schema::dropIfExists('jta_therapy_checklist_questions');
+        Schema::dropIfExists('jta_therapy_checklist_templates');
         Schema::dropIfExists('jta_therapy_assistant');
         Schema::dropIfExists('jta_assistants');
         Schema::dropIfExists('jta_therapy_consents');
@@ -61,6 +62,7 @@ class TherapyChecklistSpecTest extends TestCase
             $table->increments('id');
             $table->unsignedInteger('therapy_id');
             $table->string('primary_condition', 50);
+            $table->string('custom_condition_name', 120)->nullable();
             $table->json('care_context')->nullable();
             $table->json('doctor_info')->nullable();
             $table->json('general_anamnesis')->nullable();
@@ -119,6 +121,21 @@ class TherapyChecklistSpecTest extends TestCase
             $table->json('consents_json')->nullable();
             $table->timestamps();
             $table->unique(['pharmacy_id', 'therapy_id', 'assistant_id'], 'uq_ta_pharmacy_therapy_assistant');
+        });
+
+        Schema::create('jta_therapy_checklist_templates', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->unsignedInteger('pharmacy_id');
+            $table->string('condition_key');
+            $table->string('question_key');
+            $table->text('label');
+            $table->string('input_type')->default('text');
+            $table->json('options_json')->nullable();
+            $table->integer('sort_order')->default(0);
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_system')->default(false);
+            $table->timestamps();
+            $table->unique(['pharmacy_id', 'condition_key', 'question_key'], 'uq_tct_scope_key');
         });
 
         Schema::create('jta_therapy_checklist_questions', function (Blueprint $table): void {

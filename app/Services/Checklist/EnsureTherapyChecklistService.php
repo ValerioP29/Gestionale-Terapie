@@ -4,6 +4,7 @@ namespace App\Services\Checklist;
 
 use App\Domain\Checklist\ChecklistRegistry;
 use App\Models\Therapy;
+use App\Models\TherapyChecklistTemplate;
 use App\Support\ConditionKeyNormalizer;
 
 class EnsureTherapyChecklistService
@@ -20,9 +21,9 @@ class EnsureTherapyChecklistService
         }
 
         $conditionKey = ConditionKeyNormalizer::normalize((string) ($therapy->currentChronicCare?->primary_condition ?? 'altro'));
-        $defaults = $this->registry->forCondition($conditionKey);
+        $templates = $this->resolveTemplates($therapy->pharmacy_id, $conditionKey);
 
-        if ($defaults === []) {
+        if ($templates === []) {
             return;
         }
 
@@ -39,8 +40,43 @@ class EnsureTherapyChecklistService
                 'sort_order' => (int) ($question['sort_order'] ?? 0),
                 'is_custom' => false,
             ];
-        }, $defaults);
+        }, $templates);
 
         $therapy->checklistQuestions()->createMany($payload);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function resolveTemplates(int $pharmacyId, string $conditionKey): array
+    {
+        $defaults = $this->registry->forCondition($conditionKey);
+
+        $stored = TherapyChecklistTemplate::query()
+            ->where('pharmacy_id', $pharmacyId)
+            ->where('condition_key', $conditionKey)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (TherapyChecklistTemplate $template): array => [
+                'question_key' => (string) $template->question_key,
+                'label' => (string) $template->label,
+                'input_type' => (string) $template->input_type,
+                'options_json' => $template->options_json,
+                'default_active' => (bool) $template->is_active,
+                'sort_order' => (int) $template->sort_order,
+            ])
+            ->all();
+
+        $merged = array_values(array_reduce(array_merge($defaults, $stored), function (array $carry, array $item): array {
+            $carry[(string) $item['question_key']] = $item;
+
+            return $carry;
+        }, []));
+
+        usort($merged, fn (array $a, array $b): int => ((int) ($a['sort_order'] ?? 0)) <=> ((int) ($b['sort_order'] ?? 0)));
+
+        return $merged;
     }
 }

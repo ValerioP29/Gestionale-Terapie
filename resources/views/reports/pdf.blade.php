@@ -26,28 +26,28 @@
     <h2>Intestazione farmacia</h2>
     <table>
         @foreach($presented['header'] as $row)
-            <tr><th>{{ $row['label'] }}</th><td>{{ $row['value'] }}</td></tr>
+            <tr><th>{{ $row['label'] }}</th><td>{!! nl2br(e($row['value'])) !!}</td></tr>
         @endforeach
     </table>
 
     <h2>Anagrafica paziente</h2>
     <table>
         @foreach($presented['patient'] as $row)
-            <tr><th>{{ $row['label'] }}</th><td>{{ $row['value'] }}</td></tr>
+            <tr><th>{{ $row['label'] }}</th><td>{!! nl2br(e($row['value'])) !!}</td></tr>
         @endforeach
     </table>
 
     <h2>Terapia e percorso</h2>
     <table>
         @foreach($presented['therapy'] as $row)
-            <tr><th>{{ $row['label'] }}</th><td>{{ $row['value'] }}</td></tr>
+            <tr><th>{{ $row['label'] }}</th><td>{!! nl2br(e($row['value'])) !!}</td></tr>
         @endforeach
     </table>
 
     <h2>Quadro clinico / presa in carico</h2>
     <table>
         @foreach($presented['clinical'] as $row)
-            <tr><th>{{ $row['label'] }}</th><td>{{ $row['value'] }}</td></tr>
+            <tr><th>{{ $row['label'] }}</th><td>{!! nl2br(e($row['value'])) !!}</td></tr>
         @endforeach
     </table>
 
@@ -108,7 +108,7 @@
     <h2>Consensi</h2>
     <table>
         @foreach($presented['consents'] as $row)
-            <tr><th>{{ $row['label'] }}</th><td>{{ $row['value'] }}</td></tr>
+            <tr><th>{{ $row['label'] }}</th><td>{!! nl2br(e($row['value'])) !!}</td></tr>
         @endforeach
     </table>
 </body>

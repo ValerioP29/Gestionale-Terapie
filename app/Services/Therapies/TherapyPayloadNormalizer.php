@@ -42,9 +42,29 @@ class TherapyPayloadNormalizer
             $normalized['primary_condition'] = ConditionKeyNormalizer::normalize((string) $normalized['primary_condition']);
         }
 
+        if (($normalized['primary_condition'] ?? null) === 'altro') {
+            $normalized['primary_condition'] = ConditionKeyNormalizer::customKeyFromName((string) ($normalized['custom_condition_name'] ?? ''));
+        }
+
         if (isset($normalized['survey']) && is_array($normalized['survey']) && array_key_exists('condition_type', $normalized['survey'])) {
             $normalized['survey']['condition_type'] = ConditionKeyNormalizer::normalize((string) $normalized['survey']['condition_type']);
         }
+
+        if (isset($normalized['survey']) && is_array($normalized['survey']) && ! array_key_exists('condition_type', $normalized['survey'])) {
+            $normalized['survey']['condition_type'] = (string) ($normalized['primary_condition'] ?? 'altro');
+        }
+
+        if (! isset($normalized['survey']['answers']) || ! is_array($normalized['survey']['answers'])) {
+            return $normalized;
+        }
+
+        $normalized['survey']['answers'] = array_values(array_map(function (array $answer): array {
+            if (isset($answer['question_label']) && ! isset($answer['question_key'])) {
+                $answer['question_key'] = sprintf('custom:%s', md5((string) $answer['question_label']));
+            }
+
+            return $answer;
+        }, $normalized['survey']['answers']));
 
         return $normalized;
     }
