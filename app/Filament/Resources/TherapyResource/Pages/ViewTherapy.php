@@ -4,6 +4,7 @@ namespace App\Filament\Resources\TherapyResource\Pages;
 
 use App\Filament\Resources\TherapyResource;
 use App\Models\Therapy;
+use App\Services\Therapies\GenerateTherapyReportService;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -22,6 +23,19 @@ class ViewTherapy extends ViewRecord
     {
         return [
             Actions\EditAction::make()->label('Modifica'),
+
+            Actions\Action::make('generate_pdf')
+                ->label('Genera report PDF')
+                ->icon('heroicon-o-document-arrow-down')
+                ->action(function (Therapy $record): void {
+                    app(GenerateTherapyReportService::class)->handle($record);
+
+                    Notification::make()
+                        ->success()
+                        ->title('Report in generazione')
+                        ->body('Il report è in generazione. Lo troverai nella sezione Report della terapia appena pronto.')
+                        ->send();
+                }),
             Actions\Action::make('deleteTherapy')
                 ->label('Elimina terapia')
                 ->icon('heroicon-o-trash')

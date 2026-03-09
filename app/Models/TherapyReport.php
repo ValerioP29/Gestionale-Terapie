@@ -14,6 +14,12 @@ class TherapyReport extends Model
 
     protected $table = 'jta_therapy_reports';
 
+
+    public const STATUS_PENDING = 'pending';
+    public const STATUS_PROCESSING = 'processing';
+    public const STATUS_COMPLETED = 'completed';
+    public const STATUS_FAILED = 'failed';
+
     protected $fillable = [
         'therapy_id',
         'pharmacy_id',
@@ -22,12 +28,16 @@ class TherapyReport extends Model
         'valid_until',
         'pdf_path',
         'pdf_generated_at',
+        'status',
+        'error_message',
+        'failed_at',
     ];
 
     protected $casts = [
         'content' => 'array',
         'valid_until' => 'datetime',
         'pdf_generated_at' => 'datetime',
+        'failed_at' => 'datetime',
     ];
 
     public function therapy(): BelongsTo

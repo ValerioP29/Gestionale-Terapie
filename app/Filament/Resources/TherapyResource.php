@@ -12,6 +12,7 @@ use App\Models\Assistant;
 use App\Models\Patient;
 use App\Models\Therapy;
 use App\Models\TherapyChronicCare;
+use App\Models\TherapyReport;
 use App\Presenters\TherapyPresenter;
 use App\Services\Patients\CreatePatientService;
 use App\Services\Patients\UpdatePatientService;
@@ -23,6 +24,7 @@ use Filament\Forms\Components\Actions\Action;
 use Filament\Forms\Form;
 use Filament\Infolists\Components\Section as InfolistSection;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
 use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -335,6 +337,35 @@ class TherapyResource extends Resource
                     ->label('Ambiti consenso')
                     ->state(fn (Therapy $record): string => (new TherapyPresenter($record))->consentScopesReadable()),
             ])->columns(2),
+
+            InfolistSection::make('Report generati')->schema([
+                ViewEntry::make('reports_table')
+                    ->label('Storico report')
+                    ->view('filament.infolists.entries.therapy-reports-list')
+                    ->state(function (Therapy $record): array {
+                        return $record->reports()
+                            ->latest('created_at')
+                            ->get(['id', 'created_at', 'status', 'pdf_path', 'share_token', 'error_message'])
+                            ->map(fn (TherapyReport $report): array => [
+                                'id' => $report->id,
+                                'generated_at' => $report->created_at?->format('d/m/Y H:i') ?? '-',
+                                'status' => match ($report->status) {
+                                    TherapyReport::STATUS_COMPLETED => 'Pronto',
+                                    TherapyReport::STATUS_PROCESSING => 'In generazione',
+                                    TherapyReport::STATUS_FAILED => 'Fallito',
+                                    default => 'In coda',
+                                },
+                                'status_code' => $report->status,
+                                'download_url' => ($report->status === TherapyReport::STATUS_COMPLETED && $report->pdf_path !== null)
+                                    ? route('reports.pdf', ['token' => $report->share_token])
+                                    : null,
+                                'error_message' => $report->status === TherapyReport::STATUS_FAILED ? $report->error_message : null,
+                            ])
+                            ->all();
+                    })
+                    ->columnSpanFull(),
+            ]),
+
             InfolistSection::make('Assistenti/Caregiver')->schema([
                 TextEntry::make('assistants_list')
                     ->state(fn (Therapy $record): string => $record->assistants
@@ -414,7 +445,7 @@ class TherapyResource extends Resource
                     ->action(function (Therapy $record): void {
                         app(GenerateTherapyReportService::class)->handle($record);
 
-                        Notification::make()->success()->title('Generazione report avviata')->send();
+                        Notification::make()->success()->title('Report in generazione')->body('Il report è in generazione. Lo troverai nella sezione Report della terapia appena pronto.')->send();
                     }),
             ]);
     }
