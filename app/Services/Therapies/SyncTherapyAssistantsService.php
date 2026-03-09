@@ -42,7 +42,7 @@ class SyncTherapyAssistantsService
 
         if (count($validIds) !== count($assistantIds)) {
             throw ValidationException::withMessages([
-                'assistants' => ['One or more assistants are invalid for current tenant.'],
+                'assistants' => ['Uno o più assistenti non sono validi per la farmacia corrente.'],
             ]);
         }
 
@@ -54,15 +54,45 @@ class SyncTherapyAssistantsService
                 continue;
             }
 
+            $preferences = [
+                'contatto_telefonico' => ($assistant['pref_contact_phone'] ?? null) === 'si',
+                'contatto_email' => ($assistant['pref_contact_email'] ?? null) === 'si',
+                'contatto_sms_whatsapp' => ($assistant['pref_contact_sms_whatsapp'] ?? null) === 'si',
+            ];
+
+            $consents = [
+                'comunicazioni_terapia' => ($assistant['consent_therapy_contact'] ?? null) === 'si',
+                'trattamento_dati_terapia' => ($assistant['consent_data_processing'] ?? null) === 'si',
+            ];
+
             $syncData[$assistantId] = [
                 'pharmacy_id' => $tenantId,
                 'role' => $assistant['role'] ?? null,
-                'contact_channel' => $assistant['contact_channel'] ?? null,
-                'preferences_json' => $assistant['preferences_json'] ?? null,
-                'consents_json' => $assistant['consents_json'] ?? null,
+                'contact_channel' => self::resolvePreferredContactChannel($preferences),
+                'preferences_json' => $preferences,
+                'consents_json' => $consents,
             ];
         }
 
         $therapy->assistants()->sync($syncData);
     }
+
+    /** @param array<string, bool> $preferences */
+    private static function resolvePreferredContactChannel(array $preferences): ?string
+    {
+        if (($preferences['contatto_telefonico'] ?? false) === true) {
+            return 'phone';
+        }
+
+        if (($preferences['contatto_email'] ?? false) === true) {
+            return 'email';
+        }
+
+        if (($preferences['contatto_sms_whatsapp'] ?? false) === true) {
+            return 'whatsapp';
+        }
+
+        return null;
+    }
 }
+
