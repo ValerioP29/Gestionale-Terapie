@@ -36,6 +36,7 @@ class GenerateTherapyReportService
                 'therapy_id' => $therapy->id,
                 'share_token' => $this->generateUniqueShareToken(),
                 'valid_until' => Carbon::now()->addDays(30),
+                'status' => TherapyReport::STATUS_PENDING,
                 'content' => [
                     'patient' => $therapy->patient?->toArray(),
                     'therapy' => $therapy->toArray(),
