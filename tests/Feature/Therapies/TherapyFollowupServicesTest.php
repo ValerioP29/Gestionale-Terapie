@@ -66,6 +66,7 @@ class TherapyFollowupServicesTest extends TestCase
             $table->integer('risk_score')->nullable();
             $table->date('follow_up_date')->nullable();
             $table->text('pharmacist_notes')->nullable();
+            $table->json('snapshot')->nullable();
             $table->timestamp('canceled_at')->nullable();
             $table->timestamps();
         });
@@ -75,6 +76,8 @@ class TherapyFollowupServicesTest extends TestCase
             $table->unsignedInteger('pharmacy_id');
             $table->unsignedInteger('therapy_id');
             $table->string('condition_key')->default('generic');
+            $table->string('questionnaire_step')->nullable();
+            $table->string('section')->nullable();
             $table->string('question_key');
             $table->text('label');
             $table->string('input_type');
@@ -92,6 +95,7 @@ class TherapyFollowupServicesTest extends TestCase
             $table->unsignedInteger('followup_id');
             $table->unsignedInteger('question_id');
             $table->text('answer_value')->nullable();
+            $table->json('answer_snapshot')->nullable();
             $table->timestamp('answered_at')->nullable();
             $table->timestamps();
             $table->unique(['followup_id', 'question_id']);
@@ -149,6 +153,7 @@ class TherapyFollowupServicesTest extends TestCase
 
         $this->assertSame($first->id, $second->id);
         $this->assertCount(2, $first->checklistAnswers);
+        $this->assertNotEmpty((array) ($first->snapshot['questions'] ?? []));
         $this->assertDatabaseHas('jta_therapy_checklist_answers', [
             'followup_id' => $first->id,
             'question_id' => $q1->id,
@@ -195,6 +200,42 @@ class TherapyFollowupServicesTest extends TestCase
         $saved = TherapyChecklistAnswer::withoutGlobalScopes()->where('followup_id', $followup->id)->first();
         $this->assertSame('si', $saved?->answer_value);
         $this->assertNotNull($saved?->answered_at);
+    }
+
+
+    public function test_save_followup_answers_accepts_multiple_choice(): void
+    {
+        [$therapy] = $this->seedTherapy();
+
+        $question = TherapyChecklistQuestion::withoutGlobalScopes()->create([
+            'pharmacy_id' => $therapy->pharmacy_id,
+            'therapy_id' => $therapy->id,
+            'question_key' => 'q_multi',
+            'label' => 'Aree critiche',
+            'input_type' => 'multiple_choice',
+            'options_json' => ['A', 'B', 'C'],
+            'is_active' => true,
+        ]);
+
+        $followup = TherapyFollowup::withoutGlobalScopes()->create([
+            'pharmacy_id' => $therapy->pharmacy_id,
+            'therapy_id' => $therapy->id,
+            'entry_type' => 'check',
+            'check_type' => 'periodic',
+            'occurred_at' => now(),
+        ]);
+
+        app(SaveFollowupAnswersService::class)->handle($therapy, $followup, [
+            'answers' => [
+                $question->id => ['A', 'C'],
+            ],
+        ]);
+
+        $this->assertDatabaseHas('jta_therapy_checklist_answers', [
+            'followup_id' => $followup->id,
+            'question_id' => $question->id,
+            'answer_value' => '["A","C"]',
+        ]);
     }
 
     public function test_cancel_followup_sets_canceled_at(): void
