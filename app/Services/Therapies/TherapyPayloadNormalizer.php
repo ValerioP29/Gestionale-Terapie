@@ -50,23 +50,45 @@ class TherapyPayloadNormalizer
             $normalized['survey']['condition_type'] = ConditionKeyNormalizer::normalize((string) $normalized['survey']['condition_type']);
         }
 
+
+        if (isset($normalized['survey']) && is_array($normalized['survey'])) {
+            $normalized['survey']['base_questions'] = $this->flattenBaseQuestionSections((array) ($normalized['survey']['base_questions'] ?? []));
+            $normalized['survey']['approfondito_questions'] = array_values((array) ($normalized['survey']['approfondito_questions'] ?? []));
+        }
+
         if (isset($normalized['survey']) && is_array($normalized['survey']) && ! array_key_exists('condition_type', $normalized['survey'])) {
             $normalized['survey']['condition_type'] = (string) ($normalized['primary_condition'] ?? 'altro');
         }
 
-        if (! isset($normalized['survey']['answers']) || ! is_array($normalized['survey']['answers'])) {
-            return $normalized;
+        return $normalized;
+    }
+
+
+    /** @param array<string,mixed> $sections @return array<int,array<string,mixed>> */
+    private function flattenBaseQuestionSections(array $sections): array
+    {
+        $isAlreadyFlat = isset($sections[0])
+            && is_array($sections[0])
+            && array_key_exists('question_label', $sections[0]);
+
+        if ($isAlreadyFlat) {
+            return array_values($sections);
         }
 
-        $normalized['survey']['answers'] = array_values(array_map(function (array $answer): array {
-            if (isset($answer['question_label']) && ! isset($answer['question_key'])) {
-                $answer['question_key'] = sprintf('custom:%s', md5((string) $answer['question_label']));
+        $rows = [];
+
+        foreach ($sections as $section => $items) {
+            foreach ((array) $items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+
+                $item['section'] = is_string($section) ? $section : ($item['section'] ?? null);
+                $rows[] = $item;
             }
+        }
 
-            return $answer;
-        }, $normalized['survey']['answers']));
-
-        return $normalized;
+        return array_values($rows);
     }
 
     /** @return array<string, mixed> */

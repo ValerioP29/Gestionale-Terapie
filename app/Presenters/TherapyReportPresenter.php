@@ -31,6 +31,7 @@ class TherapyReportPresenter
             'clinical' => $this->clinicalSection(),
             'checklist' => $this->checklistSection(),
             'timeline' => $this->timelineSection(),
+            'checks' => $this->checksSection(),
             'reminders' => $this->reminderSection(),
             'consents' => $this->consentSection(),
         ];
@@ -157,6 +158,70 @@ class TherapyReportPresenter
             ->all();
     }
 
+
+    /** @return array<string, mixed> */
+    public function checksSection(): array
+    {
+        $checks = collect((array) $this->valueFromContent('checks', []));
+        $initial = $checks->first(fn (array $row): bool => ($row['check_type'] ?? null) === 'initial');
+        $periodic = $checks->filter(fn (array $row): bool => ($row['check_type'] ?? null) === 'periodic')->values();
+
+        return [
+            'initial' => is_array($initial) ? $this->formatCheckRow($initial) : null,
+            'periodic' => $periodic->map(fn (array $row): array => $this->formatCheckRow($row))->all(),
+            'comparison' => $this->comparisonRows($initial, $periodic->all()),
+        ];
+    }
+
+    /** @param array<string,mixed> $check */
+    private function formatCheckRow(array $check): array
+    {
+        return [
+            'check_type' => (string) ($check['check_type'] ?? ''),
+            'occurred_at' => $this->formatDateTime($check['occurred_at'] ?? null),
+            'answers' => collect((array) ($check['answers'] ?? []))->map(fn (array $answer): array => [
+                'question_key' => (string) ($answer['question_key'] ?? ''),
+                'question' => (string) ($answer['question_label'] ?? 'Domanda'),
+                'section' => (string) ($answer['section'] ?? '-'),
+                'questionnaire_step' => (string) ($answer['questionnaire_step'] ?? 'approfondito'),
+                'answer' => $this->formatBoolean((string) ($answer['answer_value'] ?? '')),
+                'answered_at' => $this->formatDateTime($answer['answered_at'] ?? null),
+            ])->all(),
+        ];
+    }
+
+    /** @param array<string,mixed>|null $initial @param array<int,array<string,mixed>> $periodic */
+    private function comparisonRows(?array $initial, array $periodic): array
+    {
+        if (! is_array($initial)) {
+            return [];
+        }
+
+        $initialMap = collect((array) ($initial['answers'] ?? []))
+            ->filter(fn (array $row): bool => ($row['questionnaire_step'] ?? '') === 'approfondito')
+            ->mapWithKeys(fn (array $row): array => [
+                (string) ($row['question_key'] ?? $row['question_label'] ?? '') => [
+                    'question' => (string) ($row['question_label'] ?? ''),
+                    'answer' => (string) ($row['answer_value'] ?? ''),
+                ],
+            ]);
+
+        if ($initialMap->isEmpty() || $periodic === []) {
+            return [];
+        }
+
+        $latestPeriodic = collect((array) (($periodic[count($periodic) - 1]['answers'] ?? [])))
+            ->filter(fn (array $row): bool => ($row['questionnaire_step'] ?? '') === 'approfondito')
+            ->mapWithKeys(fn (array $row): array => [
+                (string) ($row['question_key'] ?? $row['question_label'] ?? '') => (string) ($row['answer_value'] ?? ''),
+            ]);
+
+        return $initialMap->map(fn (array $initialData, string $questionKey): array => [
+            'question' => (string) ($initialData['question'] ?? $questionKey),
+            'initial' => $this->formatBoolean((string) ($initialData['answer'] ?? '')),
+            'latest_periodic' => $this->formatBoolean((string) ($latestPeriodic->get($questionKey) ?? 'N/D')),
+        ])->values()->all();
+    }
     /** @return array<int, array<string, string>> */
     public function reminderSection(): array
     {
