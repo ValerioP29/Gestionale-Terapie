@@ -127,6 +127,8 @@ class TherapyChecklistSpecTest extends TestCase
             $table->increments('id');
             $table->unsignedInteger('pharmacy_id');
             $table->string('condition_key');
+            $table->string('questionnaire_step')->default('approfondito');
+            $table->string('section')->nullable();
             $table->string('question_key');
             $table->text('label');
             $table->string('input_type')->default('text');
@@ -143,6 +145,8 @@ class TherapyChecklistSpecTest extends TestCase
             $table->unsignedInteger('pharmacy_id');
             $table->unsignedInteger('therapy_id');
             $table->string('condition_key');
+            $table->string('questionnaire_step')->default('approfondito');
+            $table->string('section')->nullable();
             $table->string('question_key');
             $table->text('label');
             $table->string('input_type');
@@ -198,6 +202,35 @@ class TherapyChecklistSpecTest extends TestCase
         $ensureService->handle($therapy->fresh());
 
         $this->assertSame($countAfterFirst, $therapy->fresh()->checklistQuestions()->count());
+    }
+
+
+    public function test_base_and_approfondito_can_share_raw_key_without_collision(): void
+    {
+        $therapy = Therapy::withoutGlobalScopes()->create([
+            'pharmacy_id' => 1,
+            'patient_id' => Patient::withoutGlobalScopes()->create(['pharmacy_id' => 1])->id,
+            'therapy_title' => 'Terapia',
+            'status' => 'active',
+        ]);
+
+        app(\App\Services\Therapies\SaveTherapySurveyService::class)->handle($therapy, [
+            'condition_type' => 'diabete',
+            'base_questions' => [[
+                'question_key' => 'aderenza',
+                'question_label' => 'Aderenza base',
+                'input_type' => 'text',
+            ]],
+            'approfondito_questions' => [[
+                'question_key' => 'aderenza',
+                'question_label' => 'Aderenza approfondita',
+                'input_type' => 'text',
+            ]],
+        ]);
+
+        $keys = $therapy->fresh()->checklistQuestions()->orderBy('question_key')->pluck('question_key')->all();
+
+        $this->assertSame(['approfondito:aderenza', 'base:aderenza'], $keys);
     }
 
     public function test_reorder_checklist_questions_updates_sort_order(): void

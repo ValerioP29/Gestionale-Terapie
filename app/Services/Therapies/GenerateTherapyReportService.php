@@ -45,9 +45,26 @@ class GenerateTherapyReportService
                     'followups' => $therapy->followups->map->toArray()->all(),
                     'reminders' => $therapy->reminders->map->toArray()->all(),
                     'consents' => $therapy->consents->map->toArray()->all(),
+                    'checks' => $therapy->followups->map(function ($followup): array {
+                        return [
+                            'id' => $followup->id,
+                            'entry_type' => $followup->entry_type,
+                            'check_type' => $followup->check_type,
+                            'occurred_at' => $followup->occurred_at?->toIso8601String(),
+                            'snapshot' => $followup->snapshot,
+                            'answers' => $followup->checklistAnswers->map(fn ($answer): array => [
+                                'question_key' => (string) ($answer->answer_snapshot['question_key'] ?? $answer->question?->question_key ?? ''),
+                                'question_label' => (string) ($answer->answer_snapshot['question_label'] ?? $answer->question?->label ?? 'Domanda checklist'),
+                                'questionnaire_step' => (string) ($answer->answer_snapshot['questionnaire_step'] ?? $answer->question?->questionnaire_step ?? 'approfondito'),
+                                'section' => (string) ($answer->answer_snapshot['section'] ?? $answer->question?->section ?? ''),
+                                'answer_value' => $answer->answer_value,
+                                'answered_at' => $answer->answered_at?->toIso8601String(),
+                            ])->values()->all(),
+                        ];
+                    })->values()->all(),
                     'checklist_answers' => $therapy->followups
                         ->flatMap(fn ($followup) => $followup->checklistAnswers->map(fn ($answer) => [
-                            'question_label' => (string) ($answer->question?->label ?? 'Domanda checklist'),
+                            'question_label' => (string) ($answer->answer_snapshot['question_label'] ?? $answer->question?->label ?? 'Domanda checklist'),
                             'answer_value' => $answer->answer_value,
                             'answered_at' => $answer->answered_at?->toIso8601String(),
                         ]))

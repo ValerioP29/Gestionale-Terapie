@@ -21,6 +21,7 @@ class ChecklistAnswerValueValidator
             'number' => $this->normalizeNumber($value),
             'date' => $this->normalizeDate($value),
             'select' => $this->normalizeSelect($value, $options),
+            'multiple_choice' => $this->normalizeMultiSelect($value, $options),
             'text' => $this->normalizeText($value),
             default => $this->normalizeText($value),
         };
@@ -99,6 +100,36 @@ class ChecklistAnswerValueValidator
         return $candidate;
     }
 
+
+    /**
+     * @param array<int, string>|null $options
+     * @return array<int, string>
+     */
+    private function normalizeMultiSelect(mixed $value, ?array $options): array
+    {
+        if (! is_array($value)) {
+            throw $this->error('Il valore deve essere una lista di opzioni.');
+        }
+
+        $allowed = collect($options ?? [])
+            ->map(static fn (mixed $option): string => trim((string) $option))
+            ->filter(static fn (string $option): bool => $option !== '')
+            ->values()
+            ->all();
+
+        $normalized = collect($value)
+            ->map(static fn (mixed $item): string => trim((string) $item))
+            ->filter(static fn (string $item): bool => $item !== '')
+            ->values();
+
+        foreach ($normalized as $candidate) {
+            if (! in_array($candidate, $allowed, true)) {
+                throw $this->error('Il valore selezionato non è tra le opzioni consentite.');
+            }
+        }
+
+        return $normalized->all();
+    }
     private function normalizeText(mixed $value): string
     {
         if (is_array($value) || is_object($value)) {

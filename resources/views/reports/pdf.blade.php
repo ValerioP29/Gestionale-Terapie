@@ -91,6 +91,47 @@
         <p class="muted">Nessun check o follow-up disponibile.</p>
     @endif
 
+
+    <h2>Check iniziale e periodici</h2>
+    @if(!empty($presented['checks']['initial']))
+        <p><strong>Check iniziale</strong> ({{ $presented['checks']['initial']['occurred_at'] }})</p>
+        <table>
+            <thead><tr><th>Sezione</th><th>Domanda</th><th>Risposta</th></tr></thead>
+            <tbody>
+                @foreach($presented['checks']['initial']['answers'] as $row)
+                    <tr><td>{{ $row['section'] }}</td><td>{{ $row['question'] }}</td><td>{{ $row['answer'] }}</td></tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
+
+    @if(count($presented['checks']['periodic'] ?? []) > 0)
+        <p><strong>Check periodici</strong></p>
+        @foreach($presented['checks']['periodic'] as $check)
+            <p class="muted">Data: {{ $check['occurred_at'] }}</p>
+            <table>
+                <thead><tr><th>Sezione</th><th>Domanda</th><th>Risposta</th></tr></thead>
+                <tbody>
+                    @foreach($check['answers'] as $row)
+                        <tr><td>{{ $row['section'] }}</td><td>{{ $row['question'] }}</td><td>{{ $row['answer'] }}</td></tr>
+                    @endforeach
+                </tbody>
+            </table>
+        @endforeach
+    @endif
+
+    @if(count($presented['checks']['comparison'] ?? []) > 0)
+        <p><strong>Confronto iniziale vs ultimo periodico (approfondito)</strong></p>
+        <table>
+            <thead><tr><th>Domanda</th><th>Iniziale</th><th>Ultimo periodico</th></tr></thead>
+            <tbody>
+                @foreach($presented['checks']['comparison'] as $row)
+                    <tr><td>{{ $row['question'] }}</td><td>{{ $row['initial'] }}</td><td>{{ $row['latest_periodic'] }}</td></tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
+
     <h2>Reminder / prossime azioni</h2>
     @if(count($presented['reminders']) > 0)
         <ul>
