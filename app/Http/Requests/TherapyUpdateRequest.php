@@ -49,7 +49,8 @@ class TherapyUpdateRequest extends FormRequest
             'survey' => ['sometimes', 'array'],
             'survey.condition_type' => ['nullable', 'string'],
             'survey.level' => ['required_with:survey', Rule::in(['base', 'approfondito'])],
-            'survey.answers' => ['nullable', 'array'],
+            'survey.base_questions' => ['nullable', 'array'],
+            'survey.approfondito_questions' => ['nullable', 'array'],
 
             'assistant_ids' => ['sometimes', 'array'],
             'assistant_ids.*' => [

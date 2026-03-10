@@ -44,10 +44,13 @@ class EditTherapy extends EditRecord
         ]) ?? [];
         $data['chronic_consent'] = $record->currentChronicCare?->consent ?? [];
 
+        $surveyAnswers = (array) ($record->latestSurvey?->answers ?? []);
+        $baseRows = (array) ($surveyAnswers['base_questions'] ?? []);
         $data['survey'] = $record->latestSurvey ? [
             'condition_type' => $record->latestSurvey->condition_type,
             'level' => $record->latestSurvey->level,
-            'answers' => $record->latestSurvey->answers,
+            'base_questions' => $this->groupBaseQuestionsBySection($baseRows),
+            'approfondito_questions' => (array) ($surveyAnswers['approfondito_questions'] ?? []),
         ] : [];
 
         $data['consent'] = $record->latestConsent ? [
@@ -77,4 +80,25 @@ class EditTherapy extends EditRecord
     {
         return app(UpdateTherapyService::class)->handle((int) $record->getKey(), $data);
     }
+
+    /** @param array<int,array<string,mixed>> $rows @return array<string,array<int,array<string,mixed>>> */
+    private function groupBaseQuestionsBySection(array $rows): array
+    {
+        $grouped = [];
+
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $section = trim((string) ($row['section'] ?? ''));
+            $sectionKey = $section !== '' ? $section : 'anamnesi_generale';
+            $grouped[$sectionKey] ??= [];
+            $grouped[$sectionKey][] = $row;
+        }
+
+        return $grouped;
+    }
+
+
 }

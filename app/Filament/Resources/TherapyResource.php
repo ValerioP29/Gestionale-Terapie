@@ -193,38 +193,31 @@ class TherapyResource extends Resource
                     Forms\Components\DatePicker::make('follow_up_date')->label('Prossimo follow-up suggerito')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
                     Forms\Components\Textarea::make('notes_initial')->label('Note cliniche iniziali')->helperText('Riassunto clinico iniziale utile al monitoraggio.')->columnSpanFull()->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
                 ])->columns(2),
-                Forms\Components\Wizard\Step::make('Questionario di aderenza')->description("Questo step rappresenta il questionario base comune, usato per report e check periodici.")->schema([
-                    Forms\Components\Hidden::make('survey.level')->default('base'),
-                    Forms\Components\Hidden::make('survey._mode_state')->dehydrated(false),
-                    Forms\Components\Hidden::make('survey._condition_state')->dehydrated(false),
+                Forms\Components\Wizard\Step::make('Questionario base iniziale')->description('Step 3: questionario base comune a tutte le patologie.')->schema([
+                    Forms\Components\Hidden::make('survey.level')->default('approfondito'),
                     Forms\Components\Placeholder::make('survey_base_hint')
                         ->label('Questionario base')
-                        ->content('Domande base comuni al percorso terapeutico, separato dalla valutazione iniziale approfondita.')
+                        ->content('Compila le domande base per sezione. Le domande sono riordinabili e riusabili nel tenant.')
                         ->columnSpanFull(),
-                    Forms\Components\Repeater::make('survey.answers')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
-                        ->schema([
-                            Forms\Components\Select::make('question_key')
-                                ->label('Domanda checklist')
-                                ->helperText('Le domande base standard vengono precaricate automaticamente.')
-                                ->required(fn (Forms\Get $get): bool => self::usesTemplateSurveyQuestions($get))
-                                ->searchable()
-                                ->visible(fn (Forms\Get $get): bool => self::usesTemplateSurveyQuestions($get))
-                                ->options(fn (Forms\Get $get): array => self::surveyQuestionOptions($get)),
-                            Forms\Components\TextInput::make('question_label')
-                                ->label('Domanda custom')
-                                ->placeholder('Inserisci una domanda personalizzata')
-                                ->required(fn (Forms\Get $get): bool => ! self::usesTemplateSurveyQuestions($get))
-                                ->visible(fn (Forms\Get $get): bool => ! self::usesTemplateSurveyQuestions($get)),
-                            Forms\Components\TextInput::make('answer')->label('Risposta')->required()->helperText('Inserisci una risposta comprensibile per il report/check periodico.'),
-                        ])
-                        ->defaultItems(0)
-                        ->afterStateHydrated(function (Forms\Set $set, Forms\Get $get): void {
-                            self::syncSurveyAnswersWithTemplates($set, $get);
-                        })
+                    self::questionnaireBuilder('survey.base_questions.care_context', 'Contesto assistenziale', true),
+                    self::questionnaireBuilder('survey.base_questions.general_anamnesis', 'Anamnesi generale', true),
+                    self::questionnaireBuilder('survey.base_questions.biometric_info', 'Dati biometrici', true),
+                    self::questionnaireBuilder('survey.base_questions.adherence_base', 'Valutazione base aderenza', true),
+                    self::questionnaireBuilder('survey.base_questions.flags', 'Segnalazioni cliniche', true),
+                ])->columns(1),
+                Forms\Components\Wizard\Step::make('Approfondito')->description('Step 4: domande personalizzate usate anche nei check periodici.')->schema([
+                    Forms\Components\Placeholder::make('survey_deep_hint')
+                        ->label('Questionario approfondito')
+                        ->content('Aggiungi le domande di approfondimento: saranno la base predefinita per i check periodici.')
+                        ->columnSpanFull(),
+                    Forms\Components\Repeater::make('survey.approfondito_questions')
+                        ->schema(self::questionBuilderSchema())
+                        ->reorderableWithButtons()
+                        ->reorderable()
                         ->addActionLabel('Aggiungi domanda')
                         ->columnSpanFull(),
-                ])->columns(2),
-                Forms\Components\Wizard\Step::make('Consenso informato')->schema([
+                ])->columns(1),
+                                Forms\Components\Wizard\Step::make('Consenso informato')->schema([
                     Forms\Components\TextInput::make('consent.signer_name')->label('Nome e cognome firmatario')->required()->maxLength(150)->validationMessages(['required' => 'Inserisci il nominativo del firmatario.']),
                     Forms\Components\Select::make('consent.signer_relation')->required()->options([
                         'patient' => 'Paziente',
@@ -524,6 +517,46 @@ class TherapyResource extends Resource
             Forms\Components\TextInput::make('email')->email()->maxLength(150),
             Forms\Components\Textarea::make('notes')->rows(3),
         ];
+    }
+
+
+    /** @return array<int, Forms\Components\Component> */
+    private static function questionBuilderSchema(): array
+    {
+        return [
+            Forms\Components\TextInput::make('question_label')->label('Testo domanda')->required()->maxLength(255),
+            Forms\Components\Select::make('input_type')->label('Tipo risposta')->required()->options([
+                'text' => 'Testo breve',
+                'text_long' => 'Testo lungo',
+                'number' => 'Numero',
+                'date' => 'Data',
+                'boolean' => 'Sì/No',
+                'select' => 'Scelta singola',
+                'multiple_choice' => 'Scelta multipla',
+            ])->live(),
+            Forms\Components\TagsInput::make('options_json')
+                ->label('Opzioni')
+                ->visible(fn (Forms\Get $get): bool => in_array((string) $get('input_type'), ['select', 'multiple_choice'], true)),
+            Forms\Components\TextInput::make('sort_order')->label('Ordine')->numeric()->default(10),
+        ];
+    }
+
+    private static function questionnaireBuilder(string $name, string $label, bool $withExample = false): Forms\Components\Section
+    {
+        return Forms\Components\Section::make($label)
+            ->schema([
+                Forms\Components\Repeater::make($name)
+                    ->default($withExample ? [[
+                        'question_label' => 'Domanda iniziale di esempio',
+                        'input_type' => 'text',
+                        'sort_order' => 10,
+                    ]] : [])
+                    ->schema(self::questionBuilderSchema())
+                    ->reorderableWithButtons()
+                    ->reorderable()
+                    ->addActionLabel('Aggiungi domanda')
+                    ->columnSpanFull(),
+            ]);
     }
 
 

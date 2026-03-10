@@ -66,6 +66,15 @@ class SaveFollowupAnswersService
                         'answer_value' => $normalizedValue === null
                             ? null
                             : $this->serializeAnswerValue($normalizedValue, $question->input_type),
+                        'answer_snapshot' => [
+                            'question_key' => $question->question_key,
+                            'question_label' => $question->label,
+                            'input_type' => $question->input_type,
+                            'options_json' => $question->options_json,
+                            'sort_order' => $question->sort_order,
+                            'section' => $question->section,
+                            'questionnaire_step' => $question->questionnaire_step ?? 'approfondito',
+                        ],
                         'answered_at' => $normalizedValue === null ? null : CarbonImmutable::now('UTC'),
                     ]
                 );
@@ -79,6 +88,10 @@ class SaveFollowupAnswersService
     {
         if ($inputType === 'boolean') {
             return $value ? '1' : '0';
+        }
+
+        if ($inputType === 'multiple_choice') {
+            return json_encode((array) $value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]';
         }
 
         return (string) $value;
