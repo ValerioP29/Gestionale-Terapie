@@ -134,7 +134,7 @@ class TherapyResource extends Resource
                     Forms\Components\DatePicker::make('end_date')->label('Data fine')->placeholder('Seleziona la data di chiusura, se prevista.')->afterOrEqual('start_date')->validationMessages(['after_or_equal' => 'La data di fine deve essere uguale o successiva alla data di inizio.']),
                     Forms\Components\Textarea::make('therapy_description')->label('Note terapia')->rows(4)->helperText('Note operative visibili al team farmacia.')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') === 'fidelity')->validationMessages(['required' => 'Per la fidelizzazione compila le note terapia.']),
                 ])->columns(2),
-                Forms\Components\Wizard\Step::make('Valutazione iniziale')->description('Inserisci solo le note cliniche iniziali e le domande strutturate del primo colloquio.')->schema([
+                Forms\Components\Wizard\Step::make('Valutazione iniziale')->description('Step 3: medico curante/specialista e dati clinici generali.')->schema([
                     Forms\Components\Select::make('primary_condition')->label('Patologia/condizione principale')->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->options(ConditionKeyNormalizer::options())->helperText('La patologia selezionata definisce il preset del questionario approfondito.')->validationMessages(['required' => 'La condizione clinica principale è obbligatoria.'])->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->live()->afterStateUpdated(function (Forms\Set $set, Forms\Get $get): void {
                             self::syncSurveyAnswersWithTemplates($set, $get);
                             self::syncInitialAssessmentGroupsWithCondition($set, $get);
@@ -151,14 +151,6 @@ class TherapyResource extends Resource
                         ->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity' && $get('primary_condition') === 'altro')
                         ->required(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity' && $get('primary_condition') === 'altro')
                         ->validationMessages(['required' => 'Inserisci il nome della patologia custom.']),
-                    Forms\Components\Placeholder::make('initial_assessment_hint')
-                        ->label('Questionario approfondito')
-                        ->content(fn (Forms\Get $get): string => $get('primary_condition') === 'altro'
-                            ? 'Per patologia "Altro" puoi costruire liberamente il questionario approfondito personalizzato.'
-                            : 'Per patologie standard viene caricato il preset approfondito coerente.')
-                        ->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
-                        ->columnSpanFull(),
-                    self::clinicalQuestionsRepeater('chronic_care.care_context', 'Contesto assistenziale', config('therapy_clinical_questions.care_context', []), 'care_context'),
                     Forms\Components\Section::make('Medico curante / Specialista')
                         ->description('Compila i riferimenti del medico curante e, se disponibile, dello specialista.')
                         ->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')
@@ -178,13 +170,6 @@ class TherapyResource extends Resource
                         ])
                         ->columns(1)
                         ->columnSpanFull(),
-                    self::clinicalQuestionsRepeater('chronic_care.general_anamnesis', 'Anamnesi generale', config('therapy_clinical_questions.general_anamnesis', []), 'general_anamnesis'),
-                    self::clinicalQuestionsRepeater('chronic_care.biometric_info', 'Dati biometrici', config('therapy_clinical_questions.biometric_info', []), 'biometric_info'),
-                    self::clinicalQuestionsRepeater('chronic_care.detailed_intake', 'Dettaglio assunzione terapia', config('therapy_clinical_questions.detailed_intake', []), 'detailed_intake'),
-                    self::clinicalQuestionsRepeater('chronic_care.adherence_base', 'Valutazione base aderenza', config('therapy_clinical_questions.adherence_base', []), 'adherence_base'),
-                    self::clinicalQuestionsRepeater('chronic_care.flags', 'Segnalazioni cliniche', config('therapy_clinical_questions.flags', []), 'flags'),
-                    self::clinicalQuestionsRepeater('chronic_care.custom_deep_dive', 'Questionario approfondito personalizzato', [], 'custom_deep_dive')
-                        ->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity' && $get('primary_condition') === 'altro'),
                     Forms\Components\TextInput::make('risk_score')->label('Indice di rischio (0-100)')->numeric()->minValue(0)->maxValue(100)->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity')->validationMessages([
                         'numeric' => 'L\'indice di rischio deve essere numerico.',
                         'min' => 'L\'indice di rischio non può essere inferiore a 0.',
@@ -193,29 +178,19 @@ class TherapyResource extends Resource
                     Forms\Components\DatePicker::make('follow_up_date')->label('Prossimo follow-up suggerito')->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
                     Forms\Components\Textarea::make('notes_initial')->label('Note cliniche iniziali')->helperText('Riassunto clinico iniziale utile al monitoraggio.')->columnSpanFull()->visible(fn (Forms\Get $get): bool => $get('ui_care_mode') !== 'fidelity'),
                 ])->columns(2),
-                Forms\Components\Wizard\Step::make('Questionario base iniziale')->description('Step 3: questionario base comune a tutte le patologie.')->schema([
-                    Forms\Components\Hidden::make('survey.level')->default('approfondito'),
+                Forms\Components\Wizard\Step::make('Questionario base iniziale')->description('Step 4: sezioni base predefinite + sezioni custom.')->schema([
                     Forms\Components\Placeholder::make('survey_base_hint')
                         ->label('Questionario base')
-                        ->content('Compila le domande base per sezione. Le domande sono riordinabili e riusabili nel tenant.')
+                        ->content('Compila e personalizza il questionario base: puoi aggiungere sezioni e domande, modificarle, eliminarle e riordinarle.')
                         ->columnSpanFull(),
-                    self::questionnaireBuilder('survey.base_questions.care_context', 'Contesto assistenziale', true),
-                    self::questionnaireBuilder('survey.base_questions.general_anamnesis', 'Anamnesi generale', true),
-                    self::questionnaireBuilder('survey.base_questions.biometric_info', 'Dati biometrici', true),
-                    self::questionnaireBuilder('survey.base_questions.adherence_base', 'Valutazione base aderenza', true),
-                    self::questionnaireBuilder('survey.base_questions.flags', 'Segnalazioni cliniche', true),
+                    self::questionnaireSectionsBuilder('survey.base_sections', 'Sezioni questionario base', self::defaultBaseQuestionnaireSections()),
                 ])->columns(1),
-                Forms\Components\Wizard\Step::make('Approfondito')->description('Step 4: domande personalizzate usate anche nei check periodici.')->schema([
+                Forms\Components\Wizard\Step::make('Approfondito')->description('Step 5: questionario approfondito custom usato nei check periodici.')->schema([
                     Forms\Components\Placeholder::make('survey_deep_hint')
                         ->label('Questionario approfondito')
-                        ->content('Aggiungi le domande di approfondimento: saranno la base predefinita per i check periodici.')
+                        ->content('Costruisci liberamente sezioni e domande custom: saranno usate per i check periodici.')
                         ->columnSpanFull(),
-                    Forms\Components\Repeater::make('survey.approfondito_questions')
-                        ->schema(self::questionBuilderSchema())
-                        ->reorderableWithButtons()
-                        ->reorderable()
-                        ->addActionLabel('Aggiungi domanda')
-                        ->columnSpanFull(),
+                    self::questionnaireSectionsBuilder('survey.approfondito_sections', 'Sezioni approfondito', []),
                 ])->columns(1),
                                 Forms\Components\Wizard\Step::make('Consenso informato')->schema([
                     Forms\Components\TextInput::make('consent.signer_name')->label('Nome e cognome firmatario')->required()->maxLength(150)->validationMessages(['required' => 'Inserisci il nominativo del firmatario.']),
@@ -524,6 +499,8 @@ class TherapyResource extends Resource
     private static function questionBuilderSchema(): array
     {
         return [
+            Forms\Components\Hidden::make('question_key'),
+            Forms\Components\Hidden::make('answer'),
             Forms\Components\TextInput::make('question_label')->label('Testo domanda')->required()->maxLength(255),
             Forms\Components\Select::make('input_type')->label('Tipo risposta')->required()->options([
                 'text' => 'Testo breve',
@@ -537,26 +514,339 @@ class TherapyResource extends Resource
             Forms\Components\TagsInput::make('options_json')
                 ->label('Opzioni')
                 ->visible(fn (Forms\Get $get): bool => in_array((string) $get('input_type'), ['select', 'multiple_choice'], true)),
-            Forms\Components\TextInput::make('sort_order')->label('Ordine')->numeric()->default(10),
+            Forms\Components\TextInput::make('ui_answer_text')
+                ->label('Risposta')
+                ->visible(fn (Forms\Get $get): bool => (string) $get('input_type') === 'text' && (string) $get('question_key') !== 'bmi'),
+            Forms\Components\TextInput::make('ui_answer_number')
+                ->label('Risposta')
+                ->numeric()
+                ->visible(fn (Forms\Get $get): bool => (string) $get('input_type') === 'number' && (string) $get('question_key') !== 'bmi'),
+            Forms\Components\DatePicker::make('ui_answer_date')
+                ->label('Risposta')
+                ->visible(fn (Forms\Get $get): bool => (string) $get('input_type') === 'date' && (string) $get('question_key') !== 'bmi'),
+            Forms\Components\Textarea::make('ui_answer_long')
+                ->label('Risposta')
+                ->rows(3)
+                ->visible(fn (Forms\Get $get): bool => (string) $get('input_type') === 'text_long'),
+            Forms\Components\Radio::make('ui_answer_boolean')
+                ->label('Risposta')
+                ->options(['1' => 'Sì', '0' => 'No'])
+                ->inline()
+                ->visible(fn (Forms\Get $get): bool => (string) $get('input_type') === 'boolean'),
+            Forms\Components\Select::make('ui_answer_select')
+                ->label('Risposta')
+                ->options(fn (Forms\Get $get): array => collect((array) ($get('options_json') ?? []))
+                    ->filter()
+                    ->mapWithKeys(fn (mixed $option): array => [(string) $option => (string) $option])
+                    ->all())
+                ->visible(fn (Forms\Get $get): bool => (string) $get('input_type') === 'select'),
+            Forms\Components\CheckboxList::make('ui_answer_multiple')
+                ->label('Risposta')
+                ->options(fn (Forms\Get $get): array => collect((array) ($get('options_json') ?? []))
+                    ->filter()
+                    ->mapWithKeys(fn (mixed $option): array => [(string) $option => (string) $option])
+                    ->all())
+                ->visible(fn (Forms\Get $get): bool => (string) $get('input_type') === 'multiple_choice'),
+            Forms\Components\Placeholder::make('bmi_display')
+                ->label('BMI (calcolato)')
+                ->content(fn (Forms\Get $get): string => ($value = $get('answer')) === null || $value === '' ? '—' : (string) $value)
+                ->visible(fn (Forms\Get $get): bool => (string) $get('question_key') === 'bmi'),
+            Forms\Components\Textarea::make('answer_detail')
+                ->label('Dettaglio (facoltativo)')
+                ->rows(2),
+            Forms\Components\Hidden::make('sort_order')->default(10),
         ];
     }
 
-    private static function questionnaireBuilder(string $name, string $label, bool $withExample = false): Forms\Components\Section
+    private static function questionnaireSectionsBuilder(string $name, string $label, array $default): Forms\Components\Section
     {
         return Forms\Components\Section::make($label)
             ->schema([
                 Forms\Components\Repeater::make($name)
-                    ->default($withExample ? [[
-                        'question_label' => 'Domanda iniziale di esempio',
-                        'input_type' => 'text',
-                        'sort_order' => 10,
-                    ]] : [])
-                    ->schema(self::questionBuilderSchema())
+                    ->default($default)
+                    ->schema([
+                        Forms\Components\TextInput::make('section')
+                            ->label('Sezione')
+                            ->required()
+                            ->maxLength(120),
+                        Forms\Components\Repeater::make('questions')
+                            ->schema(self::questionBuilderSchema())
+                            ->reorderableWithButtons()
+                            ->reorderable()
+                            ->addActionLabel('Aggiungi domanda')
+                            ->default([])
+                            ->columnSpanFull(),
+                    ])
                     ->reorderableWithButtons()
                     ->reorderable()
-                    ->addActionLabel('Aggiungi domanda')
+                    ->addActionLabel('Aggiungi sezione')
+                    ->afterStateHydrated(function (Forms\Set $set, ?array $state) use ($name): void {
+                        $processed = self::prepareSectionState($state, $name === 'survey.base_sections');
+                        $set($name, $processed);
+                    })
+                    ->afterStateUpdated(function (Forms\Set $set, ?array $state) use ($name): void {
+                        $processed = self::prepareSectionState($state, $name === 'survey.base_sections');
+
+                        if ($processed === (array) $state) {
+                            return;
+                        }
+
+                        $set($name, $processed);
+                    })
+                    ->dehydrateStateUsing(function (?array $state) use ($name): array {
+                        return self::prepareSectionState($state, $name === 'survey.base_sections');
+                    })
                     ->columnSpanFull(),
             ]);
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private static function prepareSectionState(?array $state, bool $computeBiometricDerived): array
+    {
+        $sections = self::normalizeQuestionnaireSections($state);
+
+        if ($computeBiometricDerived) {
+            $sections = self::applyBaseSectionDerivedValues($sections);
+        }
+
+        return self::withComputedSortOrder($sections);
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private static function normalizeQuestionnaireSections(?array $state): array
+    {
+        $rows = collect((array) $state)
+            ->filter(fn (mixed $row): bool => is_array($row))
+            ->values();
+
+        $looksLegacy = $rows->isNotEmpty() && $rows->contains(fn (array $row): bool => array_key_exists('question_label', $row));
+
+        if ($looksLegacy) {
+            return $rows
+                ->groupBy(fn (array $row): string => trim((string) ($row['section'] ?? '')) ?: 'Sezione personalizzata')
+                ->map(fn ($items, string $section): array => [
+                    'section' => $section,
+                    'questions' => collect($items)->map(function (array $item): array {
+                        return [
+                            'question_key' => $item['question_key'] ?? null,
+                            'question_label' => $item['question_label'] ?? '',
+                            'input_type' => $item['input_type'] ?? 'text',
+                            'options_json' => $item['options_json'] ?? null,
+                            'answer' => $item['answer'] ?? null,
+                            'answer_detail' => $item['answer_detail'] ?? null,
+                            'sort_order' => $item['sort_order'] ?? null,
+                            'ui_answer_text' => null,
+                            'ui_answer_long' => null,
+                            'ui_answer_number' => null,
+                            'ui_answer_date' => null,
+                            'ui_answer_boolean' => null,
+                            'ui_answer_select' => null,
+                            'ui_answer_multiple' => null,
+                        ];
+                    })->values()->all(),
+                ])
+                ->values()
+                ->all();
+        }
+
+        return $rows
+            ->map(function (array $row): array {
+                return [
+                    'section' => trim((string) ($row['section'] ?? '')),
+                    'questions' => collect((array) ($row['questions'] ?? []))
+                        ->filter(fn (mixed $question): bool => is_array($question) && trim((string) ($question['question_label'] ?? '')) !== '')
+                        ->map(fn (array $question): array => self::normalizeQuestionRow($question))
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->filter(fn (array $section): bool => $section['section'] !== '' || $section['questions'] !== [])
+            ->values()
+            ->all();
+    }
+
+    /** @param array<string, mixed> $question @return array<string, mixed> */
+    private static function normalizeQuestionRow(array $question): array
+    {
+        $inputType = (string) ($question['input_type'] ?? 'text');
+        $answer = self::resolveAnswerFromQuestionState($question, $inputType);
+
+        return [
+            'question_key' => $question['question_key'] ?? null,
+            'question_label' => trim((string) ($question['question_label'] ?? '')),
+            'input_type' => $inputType,
+            'options_json' => $question['options_json'] ?? null,
+            'answer' => $answer,
+            'answer_detail' => $question['answer_detail'] ?? null,
+            'sort_order' => $question['sort_order'] ?? null,
+            'ui_answer_text' => $inputType === 'text' ? (string) ($answer ?? '') : (string) ($question['ui_answer_text'] ?? ''),
+            'ui_answer_long' => $inputType === 'text_long' ? (string) ($answer ?? '') : (string) ($question['ui_answer_long'] ?? ''),
+            'ui_answer_number' => $inputType === 'number' ? $answer : ($question['ui_answer_number'] ?? null),
+            'ui_answer_date' => $inputType === 'date' ? $answer : ($question['ui_answer_date'] ?? null),
+            'ui_answer_boolean' => $inputType === 'boolean' ? $answer : ($question['ui_answer_boolean'] ?? null),
+            'ui_answer_select' => $inputType === 'select' ? $answer : ($question['ui_answer_select'] ?? null),
+            'ui_answer_multiple' => $inputType === 'multiple_choice' ? (array) ($answer ?? []) : ($question['ui_answer_multiple'] ?? null),
+        ];
+    }
+
+    /** @param array<string, mixed> $question */
+    private static function resolveAnswerFromQuestionState(array $question, string $inputType): mixed
+    {
+        $storedAnswer = $question['answer'] ?? null;
+
+        $answerByType = match ($inputType) {
+            'text' => $question['ui_answer_text'] ?? $storedAnswer,
+            'text_long' => $question['ui_answer_long'] ?? $storedAnswer,
+            'number' => $question['ui_answer_number'] ?? $storedAnswer,
+            'date' => $question['ui_answer_date'] ?? $storedAnswer,
+            'boolean' => $question['ui_answer_boolean'] ?? $storedAnswer,
+            'select' => $question['ui_answer_select'] ?? $storedAnswer,
+            'multiple_choice' => $question['ui_answer_multiple'] ?? $storedAnswer,
+            default => $storedAnswer,
+        };
+
+        return self::normalizeAnswerScalar($answerByType, $inputType);
+    }
+
+    private static function normalizeAnswerScalar(mixed $value, string $inputType): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if ($inputType === 'multiple_choice') {
+            $items = collect((array) $value)
+                ->map(fn (mixed $item): string => trim((string) $item))
+                ->filter()
+                ->values()
+                ->all();
+
+            return $items === [] ? null : $items;
+        }
+
+        if ($inputType === 'number') {
+            if ($value === '') {
+                return null;
+            }
+
+            return is_numeric($value) ? (float) $value : $value;
+        }
+
+        if (is_string($value)) {
+            $trimmed = trim($value);
+
+            return $trimmed === '' ? null : $trimmed;
+        }
+
+        return $value;
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private static function defaultBaseQuestionnaireSections(): array
+    {
+        return [
+            [
+                'section' => 'Dati biometrici',
+                'questions' => [
+                    ['question_key' => 'weight_kg', 'question_label' => 'Peso (kg)', 'input_type' => 'number', 'answer' => null],
+                    ['question_key' => 'height_cm', 'question_label' => 'Altezza (cm)', 'input_type' => 'number', 'answer' => null],
+                    ['question_key' => 'bmi', 'question_label' => 'BMI (calcolato da peso/altezza)', 'input_type' => 'number', 'answer' => null],
+                ],
+            ],
+            [
+                'section' => 'Anamnesi generale',
+                'questions' => [
+                    ['question_key' => 'allergie_note', 'question_label' => 'Il paziente presenta allergie note?', 'input_type' => 'select', 'options_json' => ['Sì', 'No'], 'answer' => null, 'answer_detail' => null],
+                    ['question_key' => 'fumo', 'question_label' => 'Il paziente fuma?', 'input_type' => 'select', 'options_json' => ['Sì', 'No', 'Ex fumatore'], 'answer' => null],
+                    ['question_key' => 'alcol', 'question_label' => 'Il paziente consuma alcolici abitualmente?', 'input_type' => 'select', 'options_json' => ['Mai', 'Occasionalmente', 'Regolarmente'], 'answer' => null],
+                    ['question_key' => 'attivita_fisica', 'question_label' => 'Il paziente pratica attività fisica?', 'input_type' => 'select', 'options_json' => ['Sì, regolare', 'Sì, saltuaria', 'No'], 'answer' => null],
+                    ['question_key' => 'altre_patologie', 'question_label' => 'Sono presenti altre patologie rilevanti?', 'input_type' => 'text_long', 'answer' => null],
+                ],
+            ],
+        ];
+    }
+
+    /** @param array<int, array<string, mixed>> $sections @return array<int, array<string, mixed>> */
+    private static function withComputedSortOrder(array $sections): array
+    {
+        $globalIndex = 1;
+
+        return array_map(function (array $section, int $sectionIndex) use (&$globalIndex): array {
+            $section['sort_order'] = ($sectionIndex + 1) * 1000;
+            $section['questions'] = array_map(function (mixed $question, int $questionIndex) use (&$globalIndex): mixed {
+                if (! is_array($question)) {
+                    return $question;
+                }
+
+                $question['sort_order'] = $globalIndex * 10;
+                $question['section_sort_order'] = ($questionIndex + 1) * 10;
+                $globalIndex++;
+
+                return $question;
+            }, (array) ($section['questions'] ?? []), array_keys((array) ($section['questions'] ?? [])));
+
+            return $section;
+        }, $sections, array_keys($sections));
+    }
+
+    /** @param array<int, array<string, mixed>> $sections @return array<int, array<string, mixed>> */
+    private static function applyBaseSectionDerivedValues(array $sections): array
+    {
+        $weight = null;
+        $height = null;
+
+        foreach ($sections as $section) {
+            foreach ((array) ($section['questions'] ?? []) as $question) {
+                if (! is_array($question)) {
+                    continue;
+                }
+
+                $key = (string) ($question['question_key'] ?? '');
+
+                if ($key === 'weight_kg' && is_numeric($question['answer'] ?? null)) {
+                    $weight = (float) $question['answer'];
+                }
+
+                if ($key === 'height_cm' && is_numeric($question['answer'] ?? null)) {
+                    $height = (float) $question['answer'];
+                }
+            }
+        }
+
+        $bmi = null;
+        if ($weight !== null && $height !== null && $height > 0.0) {
+            $heightMeters = $height > 3 ? ($height / 100) : $height;
+            if ($heightMeters > 0.0) {
+                $bmi = round($weight / ($heightMeters * $heightMeters), 2);
+            }
+        }
+
+        return array_map(function (array $section) use ($bmi): array {
+            $questions = array_map(function (mixed $question) use ($bmi): mixed {
+                if (! is_array($question)) {
+                    return $question;
+                }
+
+                if ((string) ($question['question_key'] ?? '') === 'bmi') {
+                    $question['answer'] = $bmi;
+                }
+
+                $answer = $question['answer'] ?? null;
+                $question['ui_answer_text'] = (string) (($question['input_type'] ?? '') === 'text' ? ($answer ?? '') : ($question['ui_answer_text'] ?? ''));
+                $question['ui_answer_long'] = (string) (($question['input_type'] ?? '') === 'text_long' ? ($answer ?? '') : ($question['ui_answer_long'] ?? ''));
+                $question['ui_answer_number'] = ($question['input_type'] ?? '') === 'number' ? $answer : ($question['ui_answer_number'] ?? null);
+                $question['ui_answer_date'] = ($question['input_type'] ?? '') === 'date' ? $answer : ($question['ui_answer_date'] ?? null);
+                $question['ui_answer_boolean'] = ($question['input_type'] ?? '') === 'boolean' ? $answer : ($question['ui_answer_boolean'] ?? null);
+                $question['ui_answer_select'] = ($question['input_type'] ?? '') === 'select' ? $answer : ($question['ui_answer_select'] ?? null);
+                $question['ui_answer_multiple'] = ($question['input_type'] ?? '') === 'multiple_choice' ? (array) ($answer ?? []) : ($question['ui_answer_multiple'] ?? null);
+
+                return $question;
+            }, (array) ($section['questions'] ?? []));
+
+            $section['questions'] = $questions;
+
+            return $section;
+        }, $sections);
     }
 
 

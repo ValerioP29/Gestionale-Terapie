@@ -57,10 +57,29 @@ class SaveTherapySurveyService
                     'question_label' => trim((string) $row['question_label']),
                     'input_type' => $this->mapInputType($inputType),
                     'options_json' => $this->normalizeOptions($row['options_json'] ?? null),
-                    'sort_order' => ($index + 1) * 10,
+                    'answer' => $this->normalizeAnswer($row['answer'] ?? null, $inputType),
+                    'answer_detail' => trim((string) ($row['answer_detail'] ?? '')) ?: null,
+                    'sort_order' => is_numeric($row['sort_order'] ?? null) ? (int) $row['sort_order'] : (($index + 1) * 10),
                 ];
             })
             ->all();
+    }
+
+    private function normalizeAnswer(mixed $answer, string $inputType): mixed
+    {
+        if ($answer === null || $answer === '') {
+            return null;
+        }
+
+        if ($inputType === 'multiple_choice') {
+            return collect((array) $answer)->map(fn (mixed $v): string => trim((string) $v))->filter()->values()->all();
+        }
+
+        if ($inputType === 'number' && is_numeric($answer)) {
+            return (float) $answer;
+        }
+
+        return is_string($answer) ? trim($answer) : $answer;
     }
 
     private function persistTemplatesAndChecklist(Therapy $therapy, string $conditionKey, string $step, array $questions): void

@@ -6,6 +6,7 @@ use App\Models\Patient;
 use App\Models\Pharmacy;
 use App\Models\Therapy;
 use App\Models\TherapyChecklistQuestion;
+use App\Models\TherapyFollowup;
 use App\Services\Checklist\EnsureTherapyChecklistService;
 use App\Services\Therapies\CreateTherapyService;
 use App\Services\Therapies\TherapyPayloadNormalizer;
@@ -231,6 +232,149 @@ class TherapyChecklistSpecTest extends TestCase
         $keys = $therapy->fresh()->checklistQuestions()->orderBy('question_key')->pluck('question_key')->all();
 
         $this->assertSame(['approfondito:aderenza', 'base:aderenza'], $keys);
+    }
+
+    public function test_sectioned_survey_payload_is_flattened_preserving_section(): void
+    {
+        $therapy = Therapy::withoutGlobalScopes()->create([
+            'pharmacy_id' => 1,
+            'patient_id' => Patient::withoutGlobalScopes()->create(['pharmacy_id' => 1])->id,
+            'therapy_title' => 'Terapia',
+            'status' => 'active',
+        ]);
+
+        $normalized = app(TherapyPayloadNormalizer::class)->normalize([
+            'survey' => [
+                'condition_type' => 'diabete',
+                'base_sections' => [[
+                    'section' => 'Dati biometrici',
+                    'questions' => [[
+                        'question_key' => 'weight_kg',
+                        'question_label' => 'Peso (kg)',
+                        'input_type' => 'number',
+                    ]],
+                ]],
+                'approfondito_sections' => [[
+                    'section' => 'Sintomi',
+                    'questions' => [[
+                        'question_key' => 'sintomo_x',
+                        'question_label' => 'Sintomo X',
+                        'input_type' => 'boolean',
+                    ]],
+                ]],
+            ],
+        ]);
+
+        app(\App\Services\Therapies\SaveTherapySurveyService::class)->handle($therapy, $normalized['survey'] ?? []);
+
+        $rows = $therapy->fresh()->checklistQuestions()->orderBy('question_key')->get();
+
+        $this->assertSame('Dati biometrici', $rows->firstWhere('question_key', 'base:weight_kg')?->section);
+        $this->assertSame('Sintomi', $rows->firstWhere('question_key', 'approfondito:sintomo_x')?->section);
+    }
+
+    public function test_step4_answers_are_persisted_in_survey_payload(): void
+    {
+        $therapy = Therapy::withoutGlobalScopes()->create([
+            'pharmacy_id' => 1,
+            'patient_id' => Patient::withoutGlobalScopes()->create(['pharmacy_id' => 1])->id,
+            'therapy_title' => 'Terapia',
+            'status' => 'active',
+        ]);
+
+        $normalized = app(TherapyPayloadNormalizer::class)->normalize([
+            'survey' => [
+                'condition_type' => 'diabete',
+                'base_sections' => [[
+                    'section' => 'Dati biometrici',
+                    'questions' => [[
+                        'question_key' => 'weight_kg',
+                        'question_label' => 'Peso (kg)',
+                        'input_type' => 'number',
+                        'answer' => 74,
+                        'answer_detail' => 'misurato in farmacia',
+                    ]],
+                ]],
+                'approfondito_sections' => [[
+                    'section' => 'Sintomi',
+                    'questions' => [[
+                        'question_key' => 'dispnea',
+                        'question_label' => 'Dispnea',
+                        'input_type' => 'boolean',
+                        'answer' => '1',
+                    ]],
+                ]],
+            ],
+        ]);
+
+        app(\App\Services\Therapies\SaveTherapySurveyService::class)->handle($therapy, $normalized['survey'] ?? []);
+
+        $latestSurvey = $therapy->fresh()->latestSurvey()->firstOrFail();
+        $base = (array) data_get($latestSurvey->answers, 'base_questions.0');
+        $deep = (array) data_get($latestSurvey->answers, 'approfondito_questions.0');
+
+        $this->assertSame(74.0, (float) ($base['answer'] ?? 0));
+        $this->assertSame('misurato in farmacia', (string) ($base['answer_detail'] ?? ''));
+        $this->assertSame('1', (string) ($deep['answer'] ?? ''));
+    }
+
+    public function test_reorder_is_persisted_by_sort_order_for_sectioned_payload(): void
+    {
+        $normalized = app(TherapyPayloadNormalizer::class)->normalize([
+            'survey' => [
+                'base_sections' => [
+                    [
+                        'section' => 'A',
+                        'questions' => [
+                            ['question_key' => 'q2', 'question_label' => 'Q2', 'input_type' => 'text'],
+                        ],
+                    ],
+                    [
+                        'section' => 'B',
+                        'questions' => [
+                            ['question_key' => 'q1', 'question_label' => 'Q1', 'input_type' => 'text'],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $rows = (array) data_get($normalized, 'survey.base_questions', []);
+
+        $this->assertSame('q2', $rows[0]['question_key'] ?? null);
+        $this->assertSame(10, $rows[0]['sort_order'] ?? null);
+        $this->assertSame('q1', $rows[1]['question_key'] ?? null);
+        $this->assertSame(20, $rows[1]['sort_order'] ?? null);
+    }
+
+    public function test_initial_snapshot_still_contains_base_and_approfondito(): void
+    {
+        $therapy = Therapy::withoutGlobalScopes()->create([
+            'pharmacy_id' => 1,
+            'patient_id' => Patient::withoutGlobalScopes()->create(['pharmacy_id' => 1])->id,
+            'therapy_title' => 'Terapia',
+            'status' => 'active',
+        ]);
+
+        app(\App\Services\Therapies\SaveTherapySurveyService::class)->handle($therapy, [
+            'condition_type' => 'diabete',
+            'base_questions' => [[
+                'question_key' => 'q_base',
+                'question_label' => 'Base',
+                'input_type' => 'text',
+            ]],
+            'approfondito_questions' => [[
+                'question_key' => 'q_deep',
+                'question_label' => 'Deep',
+                'input_type' => 'text',
+            ]],
+        ]);
+
+        $initial = TherapyFollowup::withoutGlobalScopes()->where('therapy_id', $therapy->id)->where('check_type', 'initial')->firstOrFail();
+        $keys = collect((array) data_get($initial->snapshot, 'questions', []))->pluck('question_key')->all();
+
+        $this->assertContains('base:q_base', $keys);
+        $this->assertContains('approfondito:q_deep', $keys);
     }
 
     public function test_reorder_checklist_questions_updates_sort_order(): void

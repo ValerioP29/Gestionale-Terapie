@@ -161,6 +161,36 @@ class TherapyFollowupServicesTest extends TestCase
         ]);
     }
 
+    public function test_periodic_check_uses_only_approfondito_questions(): void
+    {
+        [$therapy] = $this->seedTherapy();
+
+        TherapyChecklistQuestion::withoutGlobalScopes()->create([
+            'pharmacy_id' => $therapy->pharmacy_id,
+            'therapy_id' => $therapy->id,
+            'question_key' => 'q_base',
+            'questionnaire_step' => 'base',
+            'label' => 'Base question',
+            'input_type' => 'text',
+            'is_active' => true,
+        ]);
+
+        TherapyChecklistQuestion::withoutGlobalScopes()->create([
+            'pharmacy_id' => $therapy->pharmacy_id,
+            'therapy_id' => $therapy->id,
+            'question_key' => 'q_deep',
+            'questionnaire_step' => 'approfondito',
+            'label' => 'Deep question',
+            'input_type' => 'text',
+            'is_active' => true,
+        ]);
+
+        $followup = app(InitPeriodicCheckService::class)->handle($therapy);
+        $keys = $followup->checklistAnswers()->with('question')->get()->map(fn ($a) => $a->question?->question_key)->all();
+
+        $this->assertSame(['q_deep'], array_values(array_filter($keys)));
+    }
+
     public function test_save_followup_answers_persists_payload(): void
     {
         [$therapy] = $this->seedTherapy();

@@ -46,11 +46,14 @@ class EditTherapy extends EditRecord
 
         $surveyAnswers = (array) ($record->latestSurvey?->answers ?? []);
         $baseRows = (array) ($surveyAnswers['base_questions'] ?? []);
+        $deepRows = (array) ($surveyAnswers['approfondito_questions'] ?? []);
         $data['survey'] = $record->latestSurvey ? [
             'condition_type' => $record->latestSurvey->condition_type,
             'level' => $record->latestSurvey->level,
-            'base_questions' => $this->groupBaseQuestionsBySection($baseRows),
-            'approfondito_questions' => (array) ($surveyAnswers['approfondito_questions'] ?? []),
+            'base_sections' => $this->questionsToSections($baseRows),
+            'approfondito_sections' => $this->questionsToSections($deepRows),
+            'base_questions' => $baseRows,
+            'approfondito_questions' => $deepRows,
         ] : [];
 
         $data['consent'] = $record->latestConsent ? [
@@ -81,23 +84,30 @@ class EditTherapy extends EditRecord
         return app(UpdateTherapyService::class)->handle((int) $record->getKey(), $data);
     }
 
-    /** @param array<int,array<string,mixed>> $rows @return array<string,array<int,array<string,mixed>>> */
-    private function groupBaseQuestionsBySection(array $rows): array
+    /** @param array<int,array<string,mixed>> $rows @return array<int,array<string,mixed>> */
+    private function questionsToSections(array $rows): array
     {
-        $grouped = [];
-
-        foreach ($rows as $row) {
-            if (! is_array($row)) {
-                continue;
-            }
-
-            $section = trim((string) ($row['section'] ?? ''));
-            $sectionKey = $section !== '' ? $section : 'anamnesi_generale';
-            $grouped[$sectionKey] ??= [];
-            $grouped[$sectionKey][] = $row;
-        }
-
-        return $grouped;
+        return collect($rows)
+            ->filter(fn (mixed $row): bool => is_array($row))
+            ->groupBy(fn (array $row): string => trim((string) ($row['section'] ?? '')) ?: 'Sezione personalizzata')
+            ->map(function ($questions, string $section): array {
+                return [
+                    'section' => $section,
+                    'questions' => collect($questions)->map(function (array $question): array {
+                        return [
+                            'question_key' => $question['question_key'] ?? null,
+                            'question_label' => $question['question_label'] ?? '',
+                            'input_type' => $question['input_type'] ?? 'text',
+                            'options_json' => $question['options_json'] ?? null,
+                            'answer' => $question['answer'] ?? null,
+                            'answer_detail' => $question['answer_detail'] ?? null,
+                            'sort_order' => $question['sort_order'] ?? null,
+                        ];
+                    })->values()->all(),
+                ];
+            })
+            ->values()
+            ->all();
     }
 
 
