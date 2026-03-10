@@ -19,6 +19,8 @@ class TherapyChecklistQuestion extends Model
         'therapy_id',
         'pharmacy_id',
         'condition_key',
+        'questionnaire_step',
+        'section',
         'question_key',
         'label',
         'input_type',

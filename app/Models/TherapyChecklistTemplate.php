@@ -16,6 +16,8 @@ class TherapyChecklistTemplate extends Model
     protected $fillable = [
         'pharmacy_id',
         'condition_key',
+        'questionnaire_step',
+        'section',
         'question_key',
         'label',
         'input_type',

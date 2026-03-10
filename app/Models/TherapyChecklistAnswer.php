@@ -21,10 +21,12 @@ class TherapyChecklistAnswer extends Model
         'followup_id',
         'question_id',
         'answer_value',
+        'answer_snapshot',
         'answered_at',
     ];
 
     protected $casts = [
+        'answer_snapshot' => 'array',
         'answered_at' => 'datetime',
     ];
 

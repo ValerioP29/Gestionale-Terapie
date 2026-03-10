@@ -3,8 +3,8 @@
 namespace App\Services\Therapies;
 
 use App\Models\Therapy;
-use App\Models\TherapyChecklistQuestion;
 use App\Models\TherapyChecklistTemplate;
+use App\Models\TherapyFollowup;
 use Carbon\Carbon;
 
 class SaveTherapySurveyService
@@ -16,99 +16,140 @@ class SaveTherapySurveyService
         }
 
         $conditionKey = (string) ($survey['condition_type'] ?? $therapy->currentChronicCare?->primary_condition ?? 'altro');
-        $answers = is_array($survey['answers'] ?? null) ? $survey['answers'] : [];
+
+        $baseQuestions = $this->normalizeQuestionRows((array) ($survey['base_questions'] ?? []), 'base');
+        $deepQuestions = $this->normalizeQuestionRows((array) ($survey['approfondito_questions'] ?? []), 'approfondito');
 
         $therapy->conditionSurveys()->create([
             'condition_type' => $conditionKey,
-            'level' => $survey['level'],
-            'answers' => $answers,
+            'level' => 'approfondito',
+            'answers' => [
+                'base_questions' => $baseQuestions,
+                'approfondito_questions' => $deepQuestions,
+            ],
             'compiled_at' => Carbon::now(),
         ]);
 
-        $this->promoteCustomQuestionsToTemplates($therapy, $conditionKey, $answers);
+        $this->persistTemplatesAndChecklist($therapy, '__base__', 'base', $baseQuestions);
+        $this->persistTemplatesAndChecklist($therapy, $conditionKey, 'approfondito', $deepQuestions);
+
+        $this->ensureInitialCheckSnapshot($therapy, $baseQuestions, $deepQuestions);
     }
 
-    /**
-     * @param array<int, array<string, mixed>> $answers
-     */
-    private function promoteCustomQuestionsToTemplates(Therapy $therapy, string $conditionKey, array $answers): void
+    /** @param array<int, array<string,mixed>> $rows */
+    private function normalizeQuestionRows(array $rows, string $step): array
     {
-        $customRows = collect($answers)
+        return collect($rows)
             ->filter(fn (mixed $row): bool => is_array($row) && trim((string) ($row['question_label'] ?? '')) !== '')
-            ->values();
+            ->values()
+            ->map(function (array $row, int $index) use ($step): array {
+                $inputType = (string) ($row['input_type'] ?? 'text');
+                $rawKey = trim((string) ($row['question_key'] ?? ''));
 
-        if ($customRows->isEmpty()) {
-            return;
-        }
+                if ($rawKey === '') {
+                    $rawKey = sprintf('%s_%s_%03d', $step, md5((string) $row['question_label']), $index + 1);
+                }
 
-        $existingTemplates = TherapyChecklistTemplate::query()
-            ->where('pharmacy_id', $therapy->pharmacy_id)
-            ->where('condition_key', $conditionKey)
-            ->get()
-            ->keyBy(fn (TherapyChecklistTemplate $template): string => (string) $template->question_key);
+                return [
+                    'questionnaire_step' => $step,
+                    'section' => trim((string) ($row['section'] ?? '')) ?: null,
+                    'question_key' => $this->canonicalQuestionKey($step, $rawKey),
+                    'question_label' => trim((string) $row['question_label']),
+                    'input_type' => $this->mapInputType($inputType),
+                    'options_json' => $this->normalizeOptions($row['options_json'] ?? null),
+                    'sort_order' => ($index + 1) * 10,
+                ];
+            })
+            ->all();
+    }
 
-        $nextTemplateSort = (int) ($existingTemplates->max('sort_order') ?? 0);
-
-        $existingChecklist = TherapyChecklistQuestion::query()
-            ->where('therapy_id', $therapy->id)
-            ->where('pharmacy_id', $therapy->pharmacy_id)
-            ->where('condition_key', $conditionKey)
-            ->get()
-            ->keyBy(fn (TherapyChecklistQuestion $question): string => (string) $question->question_key);
-
-        $nextChecklistSort = (int) ($existingChecklist->max('sort_order') ?? 0);
-
-        foreach ($customRows as $row) {
-            $questionLabel = trim((string) $row['question_label']);
-            $questionKey = trim((string) ($row['question_key'] ?? ''));
-
-            if ($questionKey === '') {
-                continue;
-            }
-
-            $existingTemplate = $existingTemplates->get($questionKey);
-            $templateSortOrder = $existingTemplate instanceof TherapyChecklistTemplate
-                ? (int) $existingTemplate->sort_order
-                : ($nextTemplateSort += 10);
-
-            $template = TherapyChecklistTemplate::query()->updateOrCreate(
+    private function persistTemplatesAndChecklist(Therapy $therapy, string $conditionKey, string $step, array $questions): void
+    {
+        foreach ($questions as $question) {
+            TherapyChecklistTemplate::query()->updateOrCreate(
                 [
                     'pharmacy_id' => $therapy->pharmacy_id,
                     'condition_key' => $conditionKey,
-                    'question_key' => $questionKey,
+                    'questionnaire_step' => $step,
+                    'question_key' => $question['question_key'],
                 ],
                 [
-                    'label' => $questionLabel,
-                    'input_type' => 'text',
-                    'options_json' => null,
-                    'sort_order' => $templateSortOrder,
+                    'section' => $question['section'],
+                    'label' => $question['question_label'],
+                    'input_type' => $question['input_type'],
+                    'options_json' => $question['options_json'],
+                    'sort_order' => $question['sort_order'],
                     'is_active' => true,
                     'is_system' => false,
                 ],
             );
-            $existingTemplates->put($questionKey, $template);
 
-            $existingQuestion = $existingChecklist->get($questionKey);
-            $questionSortOrder = $existingQuestion instanceof TherapyChecklistQuestion
-                ? (int) $existingQuestion->sort_order
-                : ($nextChecklistSort += 10);
-
-            $question = $therapy->checklistQuestions()->updateOrCreate(
+            $therapy->checklistQuestions()->updateOrCreate(
                 [
-                    'question_key' => $questionKey,
+                    'question_key' => $question['question_key'],
                 ],
                 [
                     'pharmacy_id' => $therapy->pharmacy_id,
                     'condition_key' => $conditionKey,
-                    'label' => $questionLabel,
-                    'input_type' => 'text',
-                    'options_json' => null,
-                    'sort_order' => $questionSortOrder,
+                    'questionnaire_step' => $step,
+                    'section' => $question['section'],
+                    'label' => $question['question_label'],
+                    'input_type' => $question['input_type'],
+                    'options_json' => $question['options_json'],
+                    'sort_order' => $question['sort_order'],
                     'is_active' => true,
                     'is_custom' => true,
                 ],
             );
-            $existingChecklist->put($questionKey, $question);
         }
+    }
+
+    private function ensureInitialCheckSnapshot(Therapy $therapy, array $baseQuestions, array $deepQuestions): void
+    {
+        $initial = TherapyFollowup::query()->firstOrCreate(
+            [
+                'therapy_id' => $therapy->id,
+                'pharmacy_id' => $therapy->pharmacy_id,
+                'entry_type' => 'check',
+                'check_type' => 'initial',
+            ],
+            [
+                'occurred_at' => now('UTC'),
+                'snapshot' => ['questions' => []],
+            ],
+        );
+
+        $initial->forceFill([
+            'snapshot' => [
+                'questions' => array_values([...$baseQuestions, ...$deepQuestions]),
+            ],
+        ])->save();
+    }
+
+    private function mapInputType(string $inputType): string
+    {
+        return match ($inputType) {
+            'testo_breve' => 'text',
+            'testo_lungo' => 'text',
+            'si_no' => 'boolean',
+            'scelta_singola' => 'select',
+            'scelta_multipla', 'multiple_choice' => 'multiple_choice',
+            default => $inputType,
+        };
+    }
+
+    /** @return array<int,string>|null */
+    private function normalizeOptions(mixed $options): ?array
+    {
+        $values = collect((array) $options)->map(fn (mixed $v): string => trim((string) $v))->filter()->values()->all();
+
+        return $values === [] ? null : $values;
+    }
+
+    private function canonicalQuestionKey(string $step, string $questionKey): string
+    {
+        return str_starts_with($questionKey, $step.':')
+            ? $questionKey
+            : sprintf('%s:%s', $step, $questionKey);
     }
 }
