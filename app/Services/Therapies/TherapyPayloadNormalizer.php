@@ -52,8 +52,12 @@ class TherapyPayloadNormalizer
 
 
         if (isset($normalized['survey']) && is_array($normalized['survey'])) {
-            $normalized['survey']['base_questions'] = $this->flattenBaseQuestionSections((array) ($normalized['survey']['base_questions'] ?? []));
-            $normalized['survey']['approfondito_questions'] = array_values((array) ($normalized['survey']['approfondito_questions'] ?? []));
+            $normalized['survey']['base_questions'] = $this->flattenQuestionSections(
+                (array) ($normalized['survey']['base_sections'] ?? $normalized['survey']['base_questions'] ?? [])
+            );
+            $normalized['survey']['approfondito_questions'] = $this->flattenQuestionSections(
+                (array) ($normalized['survey']['approfondito_sections'] ?? $normalized['survey']['approfondito_questions'] ?? [])
+            );
         }
 
         if (isset($normalized['survey']) && is_array($normalized['survey']) && ! array_key_exists('condition_type', $normalized['survey'])) {
@@ -65,7 +69,7 @@ class TherapyPayloadNormalizer
 
 
     /** @param array<string,mixed> $sections @return array<int,array<string,mixed>> */
-    private function flattenBaseQuestionSections(array $sections): array
+    private function flattenQuestionSections(array $sections): array
     {
         $isAlreadyFlat = isset($sections[0])
             && is_array($sections[0])
@@ -76,14 +80,31 @@ class TherapyPayloadNormalizer
         }
 
         $rows = [];
+        $globalIndex = 1;
 
-        foreach ($sections as $section => $items) {
-            foreach ((array) $items as $item) {
+        foreach ($sections as $sectionIndex => $sectionRow) {
+            if (! is_array($sectionRow)) {
+                continue;
+            }
+
+            $sectionName = trim((string) ($sectionRow['section'] ?? ''));
+            $questions = $sectionRow['questions'] ?? null;
+
+            if ($questions === null) {
+                $questions = is_string($sectionIndex) ? $sectionRow : [];
+                if (is_string($sectionIndex) && $sectionName === '') {
+                    $sectionName = $sectionIndex;
+                }
+            }
+
+            foreach ((array) $questions as $item) {
                 if (! is_array($item)) {
                     continue;
                 }
 
-                $item['section'] = is_string($section) ? $section : ($item['section'] ?? null);
+                $item['section'] = $sectionName !== '' ? $sectionName : ($item['section'] ?? null);
+                $item['sort_order'] = $globalIndex * 10;
+                $globalIndex++;
                 $rows[] = $item;
             }
         }
