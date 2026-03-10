@@ -36,18 +36,47 @@ class InitPeriodicCheckService
                 ]);
             }
 
-            $questionIds = $therapy->checklistQuestions()
+            $questions = $therapy->checklistQuestions()
                 ->where('is_active', true)
-                ->pluck('id');
+                ->where(function ($query): void {
+                    $query->where('questionnaire_step', 'approfondito')
+                        ->orWhereNull('questionnaire_step');
+                })
+                ->orderBy('sort_order')
+                ->get();
 
-            foreach ($questionIds as $questionId) {
+            $followup->forceFill([
+                'snapshot' => [
+                    'questions' => $questions->map(fn ($question): array => [
+                        'question_id' => $question->id,
+                        'question_key' => $question->question_key,
+                        'question_label' => $question->label,
+                        'input_type' => $question->input_type,
+                        'options_json' => $question->options_json,
+                        'sort_order' => $question->sort_order,
+                        'section' => $question->section,
+                        'questionnaire_step' => $question->questionnaire_step ?? 'approfondito',
+                    ])->values()->all(),
+                ],
+            ])->save();
+
+            foreach ($questions as $question) {
                 TherapyChecklistAnswer::withoutGlobalScopes()->firstOrCreate([
                     'pharmacy_id' => $therapy->pharmacy_id,
                     'therapy_id' => $therapy->id,
                     'followup_id' => $followup->id,
-                    'question_id' => $questionId,
+                    'question_id' => $question->id,
                 ], [
                     'answer_value' => null,
+                    'answer_snapshot' => [
+                        'question_key' => $question->question_key,
+                        'question_label' => $question->label,
+                        'input_type' => $question->input_type,
+                        'options_json' => $question->options_json,
+                        'sort_order' => $question->sort_order,
+                        'section' => $question->section,
+                        'questionnaire_step' => $question->questionnaire_step ?? 'approfondito',
+                    ],
                     'answered_at' => null,
                 ]);
             }
