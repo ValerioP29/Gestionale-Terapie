@@ -1,0 +1,37 @@
+.theme-premium-dark {
+    --color-primary: #8b5cf6;
+    --color-primary-contrast: #f8fafc;
+    --color-primary-soft: #2a1f4f;
+    --color-secondary: #38bdf8;
+    --color-accent: #f59e0b;
+
+    --color-bg: #070d19;
+    --color-surface: #111a2b;
+    --color-surface-muted: #1a2538;
+    --color-surface-elevated: #1e2b41;
+    --color-border: #2f425e;
+
+    --color-text-primary: #e2e8f0;
+    --color-text-secondary: #b4c0d0;
+    --color-text-muted: #9cb0c9;
+
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-danger: #f87171;
+    --color-info: #38bdf8;
+
+    --color-sidebar-bg: #0d1525;
+    --color-topbar-bg: rgba(13, 21, 37, 0.9);
+    --color-overlay: rgba(2, 6, 23, 0.6);
+
+    --font-heading: 'Poppins', 'Inter', system-ui, sans-serif;
+    --font-body: 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+    --radius-sm: 0.5rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1rem;
+
+    --shadow-sm: 0 4px 10px rgba(2, 6, 23, 0.35);
+    --shadow-md: 0 14px 30px rgba(2, 6, 23, 0.45);
+    --shadow-lg: 0 26px 70px rgba(2, 6, 23, 0.62);
+}
