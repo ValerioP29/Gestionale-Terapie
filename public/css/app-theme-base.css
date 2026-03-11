@@ -4,7 +4,7 @@ body {
     color: var(--color-text-primary);
     font-family: var(--font-body);
     font-size: var(--font-size-base);
-    line-height: 1.55;
+    line-height: 1.5;
 }
 
 h1,
@@ -25,11 +25,8 @@ h3 { font-size: var(--font-size-lg); }
 
 p,
 li,
-td,
-th,
 label,
-small,
-span {
+small {
     color: var(--color-text-secondary);
 }
 
@@ -45,7 +42,7 @@ a {
 }
 
 a:hover {
-    color: color-mix(in srgb, var(--color-primary), black 15%);
+    color: color-mix(in srgb, var(--color-primary), black 12%);
 }
 
 hr {
@@ -55,11 +52,11 @@ hr {
 }
 
 ::selection {
-    background: color-mix(in srgb, var(--color-primary), white 72%);
+    background: color-mix(in srgb, var(--color-primary), white 78%);
     color: var(--color-text-primary);
 }
 
 :focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--color-primary), white 35%);
+    outline: 2px solid color-mix(in srgb, var(--color-primary), white 55%);
     outline-offset: 2px;
 }

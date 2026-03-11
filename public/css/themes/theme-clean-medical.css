@@ -1,27 +1,27 @@
 .theme-clean-medical {
-    --color-primary: #0f766e;
+    --color-primary: #2563eb;
     --color-primary-contrast: #ffffff;
-    --color-primary-soft: #d2f2ee;
-    --color-secondary: #0284c7;
-    --color-accent: #f59e0b;
+    --color-primary-soft: #e8efff;
+    --color-secondary: #0f766e;
+    --color-accent: #0284c7;
 
-    --color-bg: #f3f7fc;
+    --color-bg: #f5f7fb;
     --color-surface: #ffffff;
-    --color-surface-muted: #f1f7fe;
+    --color-surface-muted: #f8fafc;
     --color-surface-elevated: #ffffff;
-    --color-border: #d5e3ef;
+    --color-border: #dbe3ee;
 
     --color-text-primary: #0f172a;
-    --color-text-secondary: #475569;
+    --color-text-secondary: #334155;
     --color-text-muted: #64748b;
 
-    --color-sidebar-bg: #fbfdff;
-    --color-topbar-bg: rgba(255, 255, 255, 0.94);
+    --color-sidebar-bg: #f9fbfe;
+    --color-topbar-bg: rgba(255, 255, 255, 0.95);
 
     --font-heading: 'Inter', 'Segoe UI', system-ui, sans-serif;
     --font-body: 'Inter', 'Segoe UI', system-ui, sans-serif;
 
     --radius-sm: 0.375rem;
-    --radius-md: 0.625rem;
-    --radius-lg: 0.875rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
 }
