@@ -496,24 +496,14 @@ class TherapyResource extends Resource
 
 
     /** @return array<int, Forms\Components\Component> */
-    private static function questionBuilderSchema(): array
+    private static function questionAnswerSchema(): array
     {
         return [
             Forms\Components\Hidden::make('question_key'),
             Forms\Components\Hidden::make('answer'),
-            Forms\Components\TextInput::make('question_label')->label('Testo domanda')->required()->maxLength(255),
-            Forms\Components\Select::make('input_type')->label('Tipo risposta')->required()->options([
-                'text' => 'Testo breve',
-                'text_long' => 'Testo lungo',
-                'number' => 'Numero',
-                'date' => 'Data',
-                'boolean' => 'Sì/No',
-                'select' => 'Scelta singola',
-                'multiple_choice' => 'Scelta multipla',
-            ])->live(),
-            Forms\Components\TagsInput::make('options_json')
-                ->label('Opzioni')
-                ->visible(fn (Forms\Get $get): bool => in_array((string) $get('input_type'), ['select', 'multiple_choice'], true)),
+            Forms\Components\Hidden::make('question_label')->required(),
+            Forms\Components\Hidden::make('input_type')->required(),
+            Forms\Components\Hidden::make('options_json'),
             Forms\Components\TextInput::make('ui_answer_text')
                 ->label('Risposta')
                 ->visible(fn (Forms\Get $get): bool => (string) $get('input_type') === 'text' && (string) $get('question_key') !== 'bmi'),
@@ -558,6 +548,27 @@ class TherapyResource extends Resource
         ];
     }
 
+    /** @return array<int, Forms\Components\Component> */
+    private static function questionMetadataSchema(): array
+    {
+        return [
+            Forms\Components\TextInput::make('question_label')->label('Testo domanda')->required()->maxLength(255),
+            Forms\Components\Select::make('input_type')->label('Tipo risposta')->required()->options([
+                'text' => 'Testo breve',
+                'text_long' => 'Testo lungo',
+                'number' => 'Numero',
+                'date' => 'Data',
+                'boolean' => 'Sì/No',
+                'select' => 'Scelta singola',
+                'multiple_choice' => 'Scelta multipla',
+            ])->live(),
+            Forms\Components\TagsInput::make('options_json')
+                ->label('Opzioni')
+                ->visible(fn (Forms\Get $get): bool => in_array((string) $get('input_type'), ['select', 'multiple_choice'], true))
+                ->dehydrated(fn (Forms\Get $get): bool => in_array((string) $get('input_type'), ['select', 'multiple_choice'], true)),
+        ];
+    }
+
     private static function questionnaireSectionsBuilder(string $name, string $label, array $default): Forms\Components\Section
     {
         return Forms\Components\Section::make($label)
@@ -570,10 +581,58 @@ class TherapyResource extends Resource
                             ->required()
                             ->maxLength(120),
                         Forms\Components\Repeater::make('questions')
-                            ->schema(self::questionBuilderSchema())
+                            ->itemLabel(fn (array $state): string => trim((string) ($state['question_label'] ?? '')) !== ''
+                                ? (string) $state['question_label']
+                                : 'Nuova domanda (clicca Modifica)')
+                            ->schema(self::questionAnswerSchema())
                             ->reorderableWithButtons()
                             ->reorderable()
                             ->addActionLabel('Aggiungi domanda')
+                            ->addAction(function (Action $action): Action {
+                                return $action
+                                    ->label('Aggiungi domanda')
+                                    ->modalHeading('Nuova domanda')
+                                    ->form(self::questionMetadataSchema())
+                                    ->action(function (array $data, Forms\Components\Repeater $component): void {
+                                        $state = $component->getState();
+                                        $state[] = [
+                                            'question_key' => null,
+                                            'question_label' => trim((string) ($data['question_label'] ?? '')),
+                                            'input_type' => (string) ($data['input_type'] ?? 'text'),
+                                            'options_json' => in_array((string) ($data['input_type'] ?? ''), ['select', 'multiple_choice'], true)
+                                                ? array_values(array_filter((array) ($data['options_json'] ?? [])))
+                                                : null,
+                                            'answer' => null,
+                                            'answer_detail' => null,
+                                            'sort_order' => null,
+                                        ];
+
+                                        $component->state($state);
+                                    });
+                            })
+                            ->extraItemActions([
+                                Action::make('edit_question_metadata')
+                                    ->label('Modifica')
+                                    ->icon('heroicon-o-pencil-square')
+                                    ->color('primary')
+                                    ->fillForm(fn (array $arguments, Forms\Components\Repeater $component): array => $component->getState()[$arguments['item']] ?? [])
+                                    ->form(self::questionMetadataSchema())
+                                    ->action(function (array $data, array $arguments, Forms\Components\Repeater $component): void {
+                                        $state = $component->getState();
+                                        $item = $arguments['item'] ?? null;
+
+                                        if ($item === null || ! isset($state[$item])) {
+                                            return;
+                                        }
+
+                                        $state[$item]['question_label'] = trim((string) ($data['question_label'] ?? ''));
+                                        $state[$item]['input_type'] = (string) ($data['input_type'] ?? 'text');
+                                        $state[$item]['options_json'] = in_array((string) ($data['input_type'] ?? ''), ['select', 'multiple_choice'], true)
+                                            ? array_values(array_filter((array) ($data['options_json'] ?? [])))
+                                            : null;
+                                        $component->state($state);
+                                    }),
+                            ])
                             ->default([])
                             ->columnSpanFull(),
                     ])
