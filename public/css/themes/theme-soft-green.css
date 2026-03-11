@@ -1,0 +1,36 @@
+.theme-soft-green {
+    --color-primary: #16a34a;
+    --color-primary-contrast: #ffffff;
+    --color-primary-soft: #d9f7e4;
+    --color-secondary: #0ea5a4;
+    --color-accent: #fb923c;
+
+    --color-bg: #effaf3;
+    --color-surface: #ffffff;
+    --color-surface-muted: #ecfdf3;
+    --color-surface-elevated: #f6fffa;
+    --color-border: #b7ebcc;
+
+    --color-text-primary: #14532d;
+    --color-text-secondary: #166534;
+    --color-text-muted: #3f7b59;
+
+    --color-success: #15803d;
+    --color-warning: #d97706;
+    --color-danger: #dc2626;
+    --color-info: #0284c7;
+
+    --color-sidebar-bg: #f6fff9;
+    --color-topbar-bg: rgba(246, 255, 249, 0.9);
+
+    --font-heading: 'Nunito', 'Inter', system-ui, sans-serif;
+    --font-body: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+
+    --radius-sm: 0.5rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1.125rem;
+
+    --shadow-sm: 0 2px 8px rgba(20, 83, 45, 0.1);
+    --shadow-md: 0 12px 26px rgba(20, 83, 45, 0.14);
+    --shadow-lg: 0 24px 52px rgba(20, 83, 45, 0.2);
+}
